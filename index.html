@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tetris Hexagonal</title>
+    <style>
+        :root {
+            --cell-size: 25px;
+            --cell-color: #333;
+            --bg-color: #111;
+            --text-color: #eee;
+            --piece-colors: #FF0D72, #0DC2FF, #0DFF72, #F538FF, #FF8E0D, #FFE138, #3877FF;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .game-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 20px;
+            width: 100%;
+        }
+
+        .game-board {
+            position: relative;
+            background-color: var(--bg-color);
+            border: 2px solid #444;
+        }
+
+        .cell {
+            position: absolute;
+            width: var(--cell-size);
+            height: calc(var(--cell-size) * 1.1547);
+            background-color: var(--cell-color);
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+        }
+
+        .next-piece-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .next-piece-board {
+            position: relative;
+            background-color: var(--bg-color);
+            border: 2px solid #444;
+            margin-top: 10px;
+        }
+
+        .info-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .score-display, .level-display, .lines-display {
+            font-size: 1.2rem;
+            text-align: center;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .control-row {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        button {
+            padding: 10px 15px;
+            background-color: #444;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            min-width: 80px;
+        }
+
+        button:hover {
+            background-color: #555;
+        }
+
+        .game-over-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            font-size: 2rem;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .game-over-modal h2 {
+            margin-bottom: 20px;
+        }
+
+        .game-over-modal p {
+            margin-bottom: 30px;
+            font-size: 1.5rem;
+        }
+
+        .difficulty-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .difficulty-buttons button {
+            min-width: 120px;
+            font-size: 1.2rem;
+            padding: 12px 20px;
+        }
+
+        .easy { background-color: #0DFF72; }
+        .medium { background-color: #FF8E0D; }
+        .hard { background-color: #FF0D72; }
+        .extreme { background-color: #F538FF; }
+
+        .handicap-indicator {
+            margin-top: 10px;
+            font-size: 1rem;
+            color: #FF8E0D;
+        }
+
+        @media (max-width: 768px) {
+            :root {
+                --cell-size: 20px;
+            }
+
+            .game-container {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .controls {
+                margin-top: 10px;
+            }
+
+            button {
+                padding: 8px 12px;
+                font-size: 0.9rem;
+                min-width: 70px;
+            }
+
+            .difficulty-buttons button {
+                min-width: 100px;
+                font-size: 1rem;
+                padding: 10px 15px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            :root {
+                --cell-size: 16px;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .score-display, .level-display, .lines-display {
+                font-size: 1rem;
+            }
+
+            button {
+                padding: 6px 10px;
+                font-size: 0.8rem;
+                min-width: 60px;
+            }
+
+            .game-over-modal {
+                font-size: 1.5rem;
+            }
+
+            .game-over-modal p {
+                font-size: 1.2rem;
+            }
+
+            .difficulty-buttons {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .difficulty-buttons button {
+                width: 100%;
+                font-size: 0.9rem;
+                padding: 8px 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Tetris Hexagonal</h1>
+
+    <div class="game-container">
+        <div class="info-panel">
+            <div class="score-display">Score: <span id="score">0</span></div>
+            <div class="level-display">Niveau: <span id="level">1</span></div>
+            <div class="lines-display">Lignes: <span id="lines">0</span></div>
+            <div class="handicap-indicator" id="handicap-indicator">Handicap: 0%</div>
+
+            <div class="next-piece-container">
+                <div>Pièce suivante:</div>
+                <div class="next-piece-board" id="next-piece-board"></div>
+            </div>
+        </div>
+
+        <div class="game-board" id="game-board"></div>
+    </div>
+
+    <div class="controls">
+        <div class="control-row">
+            <button id="left-btn">←</button>
+            <button id="rotate-cw-btn">Tourner</button>
+            <button id="right-btn">→</button>
+        </div>
+        <div class="control-row">
+            <button id="down-btn">↓</button>
+            <button id="drop-btn">Tomber</button>
+        </div>
+        <div class="control-row">
+            <button id="pause-btn">Pause</button>
+            <button id="new-game-btn">Nouveau jeu</button>
+        </div>
+    </div>
+
+    <script>
+        // Configuration du jeu
+        const config = {
+            width: 10,
+            height: 18,
+            cellSize: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-size')),
+            colors: [
+                '#FF0D72', '#0DC2FF', '#0DFF72',
+                '#F538FF', '#FF8E0D', '#FFE138',
+                '#3877FF'
+            ],
+            initialSpeed: 1000,
+            speedIncrease: 50,
+            linesPerLevel: 5,
+            handicapInterval: 15000 // 15 secondes
+        };
+
+        // État du jeu
+        const state = {
+            board: [],
+            currentPiece: null,
+            nextPiece: null,
+            position: { x: 0, y: 0 },
+            score: 0,
+            level: 1,
+            lines: 0,
+            speed: config.initialSpeed,
+            isGameOver: false,
+            isPaused: false,
+            gameInterval: null,
+            handicapInterval: null,
+            handicapProbability: 0,
+            difficulty: 'medium'
+        };
+
+        // Pièces hexagonales (représentées comme des tableaux 2D)
+        const pieces = [
+            // Piece 0: Hexagone simple
+            [
+                [1, 1],
+                [1, 1]
+            ],
+            // Piece 1: Ligne de 3
+            [
+                [1, 1, 1]
+            ],
+            // Piece 2: T
+            [
+                [0, 1, 0],
+                [1, 1, 1]
+            ],
+            // Piece 3: Zigzag
+            [
+                [1, 1, 0],
+                [0, 1, 1]
+            ],
+            // Piece 4: Zigzag inversé
+            [
+                [0, 1, 1],
+                [1, 1, 0]
+            ],
+            // Piece 5: L
+            [
+                [1, 0],
+                [1, 0],
+                [1, 1]
+            ],
+            // Piece 6: L inversé
+            [
+                [0, 1],
+                [0, 1],
+                [1, 1]
+            ]
+        ];
+
+        // Éléments DOM
+        const dom = {
+            gameBoard: document.getElementById('game-board'),
+            nextPieceBoard: document.getElementById('next-piece-board'),
+            scoreDisplay: document.getElementById('score'),
+            levelDisplay: document.getElementById('level'),
+            linesDisplay: document.getElementById('lines'),
+            handicapIndicator: document.getElementById('handicap-indicator'),
+            leftBtn: document.getElementById('left-btn'),
+            rightBtn: document.getElementById('right-btn'),
+            downBtn: document.getElementById('down-btn'),
+            rotateCwBtn: document.getElementById('rotate-cw-btn'),
+            dropBtn: document.getElementById('drop-btn'),
+            pauseBtn: document.getElementById('pause-btn'),
+            newGameBtn: document.getElementById('new-game-btn')
+        };
+
+        // Initialisation du jeu
+        const initGame = (difficulty = 'medium') => {
+            state.difficulty = difficulty;
+
+            // Configurer la difficulté
+            switch(difficulty) {
+                case 'easy':
+                    state.handicapProbability = 0.1;
+                    state.speed = config.initialSpeed;
+                    break;
+                case 'medium':
+                    state.handicapProbability = 0.2;
+                    state.speed = config.initialSpeed * 0.8;
+                    break;
+                case 'hard':
+                    state.handicapProbability = 0.35;
+                    state.speed = config.initialSpeed * 0.6;
+                    break;
+                case 'extreme':
+                    state.handicapProbability = 0.5;
+                    state.speed = config.initialSpeed * 0.4;
+                    break;
+            }
+
+            // Créer le plateau vide
+            state.board = Array.from({ length: config.height }, () =>
+                Array.from({ length: config.width }, () => 0)
+            );
+
+            // Configurer la taille du plateau
+            const hexWidth = config.cellSize * 0.75;
+            const hexHeight = config.cellSize * 1.1547;
+
+            const boardWidth = config.width * hexWidth + config.cellSize * 0.25;
+            const boardHeight = config.height * hexHeight * 0.5 + hexHeight * 0.5;
+
+            dom.gameBoard.style.width = `${boardWidth}px`;
+            dom.gameBoard.style.height = `${boardHeight}px`;
+
+            // Générer une nouvelle pièce
+            generateNewPiece();
+
+            // Dessiner le plateau
+            drawBoard();
+
+            // Démarrer le jeu
+            startGame();
+
+            // Mettre à jour l'indicateur de handicap
+            updateHandicapIndicator();
+        };
+
+        // Générer une nouvelle pièce
+        const generateNewPiece = () => {
+            if (state.nextPiece !== null) {
+                state.currentPiece = state.nextPiece;
+                state.currentPieceColor = state.nextPieceColor;
+            } else {
+                const pieceIndex = Math.floor(Math.random() * pieces.length);
+                state.currentPiece = pieces[pieceIndex];
+                state.currentPieceColor = config.colors[pieceIndex];
+            }
+
+            const nextPieceIndex = Math.floor(Math.random() * pieces.length);
+            state.nextPiece = pieces[nextPieceIndex];
+            state.nextPieceColor = config.colors[nextPieceIndex];
+
+            // Position initiale (au milieu en haut)
+            state.position = {
+                x: Math.floor(config.width / 2) - Math.floor(state.currentPiece[0].length / 2),
+                y: 0
+            };
+
+            // Dessiner la pièce suivante
+            drawNextPiece();
+
+            // Vérifier si le jeu est terminé
+            if (checkCollision()) {
+                gameOver();
+            }
+        };
+
+        // Dessiner le plateau de jeu
+        const drawBoard = () => {
+            dom.gameBoard.innerHTML = '';
+
+            // Dessiner les cellules
+            for (let y = 0; y < config.height; y++) {
+                for (let x = 0; x < config.width; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+
+                    // Positionnement hexagonal
+                    const hexWidth = config.cellSize * 0.75;
+                    const hexHeight = config.cellSize * 1.1547;
+
+                    const offsetX = y % 2 === 0 ? 0 : hexWidth / 2;
+                    const cellX = x * hexWidth + offsetX;
+                    const cellY = y * hexHeight * 0.5;
+
+                    cell.style.left = `${cellX}px`;
+                    cell.style.top = `${cellY}px`;
+
+                    // Couleur de la cellule
+                    if (state.board[y][x]) {
+                        cell.style.backgroundColor = state.board[y][x];
+                    }
+
+                    dom.gameBoard.appendChild(cell);
+                }
+            }
+
+            // Dessiner la pièce courante
+            drawCurrentPiece();
+        };
+
+        // Dessiner la pièce courante
+        const drawCurrentPiece = () => {
+            if (!state.currentPiece) return;
+
+            for (let y = 0; y < state.currentPiece.length; y++) {
+                for (let x = 0; x < state.currentPiece[y].length; x++) {
+                    if (state.currentPiece[y][x]) {
+                        const boardX = state.position.x + x;
+                        const boardY = state.position.y + y;
+
+                        if (boardY >= 0 && boardY < config.height && boardX >= 0 && boardX < config.width) {
+                            const cell = document.createElement('div');
+                            cell.className = 'cell';
+                            cell.style.backgroundColor = state.currentPieceColor;
+
+                            // Positionnement hexagonal
+                            const hexWidth = config.cellSize * 0.75;
+                            const hexHeight = config.cellSize * 1.1547;
+
+                            const offsetX = boardY % 2 === 0 ? 0 : hexWidth / 2;
+                            const cellX = boardX * hexWidth + offsetX;
+                            const cellY = boardY * hexHeight * 0.5;
+
+                            cell.style.left = `${cellX}px`;
+                            cell.style.top = `${cellY}px`;
+                            cell.style.opacity = '0.8';
+
+                            dom.gameBoard.appendChild(cell);
+                        }
+                    }
+                }
+            }
+        };
+
+        // Dessiner la pièce suivante
+        const drawNextPiece = () => {
+            dom.nextPieceBoard.innerHTML = '';
+
+            // Taille du conteneur
+            const pieceWidth = state.nextPiece[0].length;
+            const pieceHeight = state.nextPiece.length;
+
+            const hexWidth = config.cellSize * 0.75;
+            const hexHeight = config.cellSize * 1.1547;
+
+            const containerWidth = pieceWidth * hexWidth + hexWidth * 0.5;
+            const containerHeight = pieceHeight * hexHeight * 0.5 + hexHeight * 0.5;
+
+            dom.nextPieceBoard.style.width = `${containerWidth}px`;
+            dom.nextPieceBoard.style.height = `${containerHeight}px`;
+
+            // Dessiner la pièce
+            for (let y = 0; y < pieceHeight; y++) {
+                for (let x = 0; x < pieceWidth; x++) {
+                    if (state.nextPiece[y][x]) {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+                        cell.style.backgroundColor = state.nextPieceColor;
+
+                        // Positionnement hexagonal
+                        const offsetX = y % 2 === 0 ? 0 : hexWidth / 2;
+                        const cellX = x * hexWidth + offsetX;
+                        const cellY = y * hexHeight * 0.5;
+
+                        cell.style.left = `${cellX}px`;
+                        cell.style.top = `${cellY}px`;
+
+                        dom.nextPieceBoard.appendChild(cell);
+                    }
+                }
+            }
+        };
+
+        // Vérifier les collisions
+        const checkCollision = () => {
+            for (let y = 0; y < state.currentPiece.length; y++) {
+                for (let x = 0; x < state.currentPiece[y].length; x++) {
+                    if (state.currentPiece[y][x]) {
+                        const boardX = state.position.x + x;
+                        const boardY = state.position.y + y;
+
+                        // Vérifier les bords
+                        if (boardX < 0 || boardX >= config.width || boardY >= config.height) {
+                            return true;
+                        }
+
+                        // Vérifier les pièces existantes
+                        if (boardY >= 0 && state.board[boardY][boardX]) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        };
+
+        // Faire tomber la pièce
+        const dropPiece = () => {
+            state.position.y++;
+
+            if (checkCollision()) {
+                state.position.y--;
+                lockPiece();
+                clearLines();
+                generateNewPiece();
+            }
+
+            drawBoard();
+        };
+
+        // Verrouiller la pièce en place
+        const lockPiece = () => {
+            for (let y = 0; y < state.currentPiece.length; y++) {
+                for (let x = 0; x < state.currentPiece[y].length; x++) {
+                    if (state.currentPiece[y][x]) {
+                        const boardX = state.position.x + x;
+                        const boardY = state.position.y + y;
+
+                        if (boardY >= 0) {
+                            state.board[boardY][boardX] = state.currentPieceColor;
+                        }
+                    }
+                }
+            }
+        };
+
+        // Effacer les lignes complètes
+        const clearLines = () => {
+            let linesCleared = 0;
+
+            for (let y = config.height - 1; y >= 0; y--) {
+                let lineComplete = true;
+
+                for (let x = 0; x < config.width; x++) {
+                    if (!state.board[y][x]) {
+                        lineComplete = false;
+                        break;
+                    }
+                }
+
+                if (lineComplete) {
+                    // Déplacer toutes les lignes au-dessus vers le bas
+                    for (let yy = y; yy > 0; yy--) {
+                        state.board[yy] = [...state.board[yy - 1]];
+                    }
+
+                    // Ajouter une nouvelle ligne vide en haut
+                    state.board[0] = Array(config.width).fill(0);
+
+                    // Vérifier à nouveau la même ligne (puisqu'elle a été remplacée)
+                    y++;
+                    linesCleared++;
+                }
+            }
+
+            if (linesCleared > 0) {
+                // Mettre à jour le score
+                updateScore(linesCleared);
+            }
+        };
+
+        // Ajouter une ligne handicap aléatoire
+        const addHandicapLine = () => {
+            if (Math.random() > state.handicapProbability) return;
+
+            // Déplacer toutes les lignes vers le haut
+            for (let y = 0; y < config.height - 1; y++) {
+                state.board[y] = [...state.board[y + 1]];
+            }
+
+            // Ajouter une nouvelle ligne en bas avec des trous aléatoires
+            const newLine = Array(config.width).fill(0).map(() => {
+                return Math.random() < 0.7 ? config.colors[Math.floor(Math.random() * config.colors.length)] : 0;
+            });
+
+            state.board[config.height - 1] = newLine;
+
+            // Vérifier si le jeu est terminé
+            if (checkCollision()) {
+                gameOver();
+            }
+
+            drawBoard();
+        };
+
+        // Mettre à jour le score
+        const updateScore = (linesCleared) => {
+            const points = [0, 40, 100, 300, 1200]; // Points pour 0, 1, 2, 3, 4 lignes
+            state.score += points[linesCleared] * state.level;
+            state.lines += linesCleared;
+
+            // Vérifier si le niveau doit augmenter
+            const newLevel = Math.floor(state.lines / config.linesPerLevel) + 1;
+            if (newLevel > state.level) {
+                state.level = newLevel;
+                state.speed = Math.max(config.initialSpeed - (state.level - 1) * config.speedIncrease, 100);
+
+                // Redémarrer l'intervalle avec la nouvelle vitesse
+                clearInterval(state.gameInterval);
+                state.gameInterval = setInterval(dropPiece, state.speed);
+
+                // Augmenter légèrement le handicap avec le niveau
+                state.handicapProbability = Math.min(state.handicapProbability + 0.02, 0.6);
+                updateHandicapIndicator();
+            }
+
+            // Mettre à jour l'affichage
+            dom.scoreDisplay.textContent = state.score;
+            dom.levelDisplay.textContent = state.level;
+            dom.linesDisplay.textContent = state.lines;
+        };
+
+        // Mettre à jour l'indicateur de handicap
+        const updateHandicapIndicator = () => {
+            const percentage = Math.round(state.handicapProbability * 100);
+            dom.handicapIndicator.textContent = `Handicap: ${percentage}%`;
+            dom.handicapIndicator.style.color = `hsl(${40 + percentage * 0.6}, 100%, 50%)`;
+        };
+
+        // Déplacer la pièce
+        const movePiece = (dx, dy) => {
+            state.position.x += dx;
+            state.position.y += dy;
+
+            if (checkCollision()) {
+                state.position.x -= dx;
+                state.position.y -= dy;
+                return false;
+            }
+
+            drawBoard();
+            return true;
+        };
+
+        // Faire tomber la pièce directement
+        const hardDrop = () => {
+            while (movePiece(0, 1)) {
+                // Continue de tomber jusqu'à collision
+            }
+
+            lockPiece();
+            clearLines();
+            generateNewPiece();
+            drawBoard();
+        };
+
+        // Faire pivoter la pièce (sens horaire)
+        const rotatePiece = () => {
+            const oldPiece = state.currentPiece;
+            const newPiece = [];
+
+            // Rotation pour une grille hexagonale (plus complexe qu'une grille carrée)
+            const rows = oldPiece.length;
+            const cols = oldPiece[0].length;
+
+            // Créer une nouvelle pièce pivotée
+            for (let x = 0; x < cols; x++) {
+                newPiece[x] = [];
+                for (let y = 0; y < rows; y++) {
+                    newPiece[x][y] = oldPiece[rows - 1 - y][x];
+                }
+            }
+
+            const oldPosition = { ...state.position };
+            state.currentPiece = newPiece;
+
+            // Ajuster la position pour éviter de sortir du plateau
+            if (state.position.x + newPiece[0].length > config.width) {
+                state.position.x = config.width - newPiece[0].length;
+            }
+
+            if (checkCollision()) {
+                // Essayer de décaler la pièce si la rotation cause une collision
+                if (movePiece(-1, 0)) return;
+                if (movePiece(1, 0)) return;
+                if (movePiece(0, -1)) return;
+
+                // Si aucun décalage ne fonctionne, annuler la rotation
+                state.currentPiece = oldPiece;
+                state.position = oldPosition;
+            }
+
+            drawBoard();
+        };
+
+        // Démarrer le jeu
+        const startGame = () => {
+            state.isGameOver = false;
+            state.isPaused = false;
+            state.score = 0;
+            state.level = 1;
+            state.lines = 0;
+
+            dom.scoreDisplay.textContent = '0';
+            dom.levelDisplay.textContent = '1';
+            dom.linesDisplay.textContent = '0';
+
+            clearInterval(state.gameInterval);
+            state.gameInterval = setInterval(dropPiece, state.speed);
+
+            clearInterval(state.handicapInterval);
+            state.handicapInterval = setInterval(addHandicapLine, config.handicapInterval);
+        };
+
+        // Mettre le jeu en pause
+        const togglePause = () => {
+            state.isPaused = !state.isPaused;
+
+            if (state.isPaused) {
+                clearInterval(state.gameInterval);
+                clearInterval(state.handicapInterval);
+                dom.pauseBtn.textContent = 'Reprendre';
+            } else {
+                state.gameInterval = setInterval(dropPiece, state.speed);
+                state.handicapInterval = setInterval(addHandicapLine, config.handicapInterval);
+                dom.pauseBtn.textContent = 'Pause';
+                drawBoard();
+            }
+        };
+
+        // Fin du jeu
+        const gameOver = () => {
+            state.isGameOver = true;
+            clearInterval(state.gameInterval);
+            clearInterval(state.handicapInterval);
+
+            const modal = document.createElement('div');
+            modal.className = 'game-over-modal';
+            modal.innerHTML = `
+                <h2>Game Over</h2>
+                <p>Score: ${state.score}<br>
+                Niveau: ${state.level}<br>
+                Lignes: ${state.lines}</p>
+
+                <div>Choisissez une difficulté:</div>
+                <div class="difficulty-buttons">
+                    <button class="easy">Facile</button>
+                    <button class="medium">Moyen</button>
+                    <button class="hard">Difficile</button>
+                    <button class="extreme">Extrême</button>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+
+            // Gestion des boutons de difficulté
+            modal.querySelector('.easy').addEventListener('click', () => {
+                modal.remove();
+                initGame('easy');
+            });
+
+            modal.querySelector('.medium').addEventListener('click', () => {
+                modal.remove();
+                initGame('medium');
+            });
+
+            modal.querySelector('.hard').addEventListener('click', () => {
+                modal.remove();
+                initGame('hard');
+            });
+
+            modal.querySelector('.extreme').addEventListener('click', () => {
+                modal.remove();
+                initGame('extreme');
+            });
+        };
+
+        // Gestion des événements
+        const setupEventListeners = () => {
+            // Clavier
+            document.addEventListener('keydown', (e) => {
+                if (state.isGameOver || state.isPaused) return;
+
+                switch (e.key) {
+                    case 'ArrowLeft':
+                        movePiece(-1, 0);
+                        break;
+                    case 'ArrowRight':
+                        movePiece(1, 0);
+                        break;
+                    case 'ArrowDown':
+                        movePiece(0, 1);
+                        break;
+                    case 'ArrowUp':
+                        rotatePiece();
+                        break;
+                    case ' ':
+                        hardDrop();
+                        break;
+                    case 'p':
+                        togglePause();
+                        break;
+                }
+            });
+
+            // Boutons tactiles
+            dom.leftBtn.addEventListener('click', () => movePiece(-1, 0));
+            dom.rightBtn.addEventListener('click', () => movePiece(1, 0));
+            dom.downBtn.addEventListener('click', () => movePiece(0, 1));
+            dom.rotateCwBtn.addEventListener('click', rotatePiece);
+            dom.dropBtn.addEventListener('click', hardDrop);
+            dom.pauseBtn.addEventListener('click', togglePause);
+            dom.newGameBtn.addEventListener('click', () => initGame(state.difficulty));
+        };
+
+        // Initialiser le jeu quand la page est chargée
+        window.addEventListener('DOMContentLoaded', () => {
+            setupEventListeners();
+
+            // Afficher l'écran de démarrage avec choix de difficulté
+            const startModal = document.createElement('div');
+            startModal.className = 'game-over-modal';
+            startModal.innerHTML = `
+                <h2>Tetris Hexagonal</h2>
+                <p>Choisissez une difficulté pour commencer:</p>
+
+                <div class="difficulty-buttons">
+                    <button class="easy">Facile</button>
+                    <button class="medium">Moyen</button>
+                    <button class="hard">Difficile</button>
+                    <button class="extreme">Extrême</button>
+                </div>
+            `;
+
+            document.body.appendChild(startModal);
+
+            // Gestion des boutons de difficulté
+            startModal.querySelector('.easy').addEventListener('click', () => {
+                startModal.remove();
+                initGame('easy');
+            });
+
+            startModal.querySelector('.medium').addEventListener('click', () => {
+                startModal.remove();
+                initGame('medium');
+            });
+
+            startModal.querySelector('.hard').addEventListener('click', () => {
+                startModal.remove();
+                initGame('hard');
+            });
+
+            startModal.querySelector('.extreme').addEventListener('click', () => {
+                startModal.remove();
+                initGame('extreme');
+            });
+        });
+    </script>
+</body>
+</html>
