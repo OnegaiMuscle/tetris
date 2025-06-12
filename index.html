@@ -2,13 +2,14 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Tetris en tuiles</title>
+  <title>Tetris Bitboard</title>
   <style>
     canvas {
-      background: #111;
+      background: #c8e0c8; /* Couleur Game Boy */
       display: block;
       margin: 20px auto;
       image-rendering: pixelated;
+      border: 10px solid #8b9570;
     }
   </style>
 </head>
@@ -25,15 +26,16 @@
     canvas.width = COLS * TILE;
     canvas.height = ROWS * TILE;
 
-    // Pièces Tetris classiques
+    // Représentation des pièces en bitboards (4x4 bits max)
+    // Chaque ligne est représentée par un nombre entier
     const SHAPES = {
-      I: [[1, 1, 1, 1]],
-      O: [[1, 1], [1, 1]],
-      T: [[0, 1, 0], [1, 1, 1]],
-      S: [[0, 1, 1], [1, 1, 0]],
-      Z: [[1, 1, 0], [0, 1, 1]],
-      J: [[1, 0, 0], [1, 1, 1]],
-      L: [[0, 0, 1], [1, 1, 1]],
+      I: [0b0000, 0b1111, 0b0000, 0b0000], // ---- | #### | ---- | ----
+      O: [0b0110, 0b0110, 0b0000, 0b0000], // -##- | -##- | ---- | ----
+      T: [0b0100, 0b1110, 0b0000, 0b0000], // -#-- | ###- | ---- | ----
+      S: [0b0110, 0b1100, 0b0000, 0b0000], // -##- | ##-- | ---- | ----
+      Z: [0b1100, 0b0110, 0b0000, 0b0000], // ##-- | -##- | ---- | ----
+      J: [0b1000, 0b1110, 0b0000, 0b0000], // #--- | ###- | ---- | ----
+      L: [0b0010, 0b1110, 0b0000, 0b0000]  // --#- | ###- | ---- | ----
     };
 
     const COLORS = {
@@ -41,13 +43,15 @@
       Z: '#f00', J: '#00f', L: '#fa0'
     };
 
-    const grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+    // La grille est un tableau de 24 entiers sur 16 bits (seuls 10 bits sont utilisés)
+    // Chaque ligne est un entier 16-bit où les 10 bits de poids faible représentent les colonnes
+    let grid = new Array(ROWS).fill(0);
 
     function createPiece(type) {
       return {
         shape: SHAPES[type],
         color: COLORS[type],
-        x: Math.floor(COLS / 2) - 1,
+        x: 3, // Position centrée
         y: 0
       };
     }
@@ -61,6 +65,7 @@
       return Object.keys(SHAPES)[Math.floor(Math.random() * 7)];
     }
 
+    // Dessiner un bloc simple
     function drawTile(x, y, color) {
       ctx.fillStyle = color;
       ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
@@ -68,39 +73,76 @@
       ctx.strokeRect(x * TILE, y * TILE, TILE, TILE);
     }
 
-    function drawMatrix(matrix, offset, color) {
-      matrix.forEach((row, y) =>
-        row.forEach((value, x) => {
-          if (value) drawTile(x + offset.x, y + offset.y, color);
-        })
-      );
-    }
-
-    function merge(grid, piece) {
-      piece.shape.forEach((row, y) =>
-        row.forEach((value, x) => {
-          if (value) {
-            grid[y + piece.y][x + piece.x] = piece.color;
+    // Dessiner une pièce ou la grille à partir d'un bitboard
+    function drawBitboard(board, offsetX, offsetY, color) {
+      for (let y = 0; y < board.length; y++) {
+        let row = board[y];
+        // Parcourir chaque bit de la ligne (de droite à gauche)
+        for (let x = 0; x < 10; x++) {
+          // Vérifier si le bit est activé (1 << x effectue un décalage de 1 bit de x positions)
+          if (row & (1 << x)) {
+            drawTile(offsetX + x, offsetY + y, color);
           }
-        })
-      );
+        }
+      }
     }
 
+    // Vérifier si la pièce entre en collision avec la grille ou les bords
     function collide(grid, piece) {
-      return piece.shape.some((row, y) =>
-        row.some((value, x) =>
-          value && (
-            y + piece.y >= ROWS ||
-            x + piece.x < 0 ||
-            x + piece.x >= COLS ||
-            grid[y + piece.y]?.[x + piece.x]
-          )
-        )
-      );
+      for (let y = 0; y < 4; y++) {
+        // Pour chaque ligne de la pièce
+        let rowY = piece.y + y;
+        if (rowY < 0) continue; // Ignorer les lignes au-dessus de la grille
+
+        // Calculer la position effective de la ligne de la pièce dans la grille
+        // Décaler la ligne de la pièce de 'piece.x' bits vers la gauche
+        let shiftedPieceRow = piece.shape[y] << piece.x;
+
+        if (rowY >= ROWS) {
+          // Collision avec le bas de la grille
+          if (piece.shape[y] !== 0) return true;
+          continue;
+        }
+
+        // Vérifier si la pièce dépasse les bords latéraux
+        if ((shiftedPieceRow & 0b1111111111111111) !== shiftedPieceRow) {
+          return true; // La pièce dépasse à droite ou à gauche
+        }
+
+        // Vérifier la collision avec des blocs existants
+        if ((shiftedPieceRow & grid[rowY]) !== 0) {
+          return true; // Collision détectée
+        }
+      }
+      return false;
     }
 
-    function rotate(matrix) {
-      return matrix[0].map((_, i) => matrix.map(row => row[i]).reverse());
+    // Fusionner la pièce avec la grille
+    function merge(grid, piece) {
+      for (let y = 0; y < 4; y++) {
+        if (piece.y + y >= 0 && piece.y + y < ROWS) {
+          // Décaler la ligne de la pièce à sa position X et l'ajouter à la grille avec OR bitwise
+          grid[piece.y + y] |= (piece.shape[y] << piece.x);
+        }
+      }
+    }
+
+    // Rotation de la pièce en utilisant des opérations bitwise
+    function rotate(pieceShape) {
+      let result = [0, 0, 0, 0];
+
+      // Pour chaque bit dans la matrice 4x4
+      for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < 4; x++) {
+          // Si le bit est activé à la position (y, x)
+          if (pieceShape[y] & (1 << x)) {
+            // Activez le bit correspondant à la position (x, 3-y) dans le résultat
+            result[x] |= (1 << (3 - y));
+          }
+        }
+      }
+
+      return result;
     }
 
     function drop() {
@@ -112,17 +154,24 @@
         piece = createPiece(randomType());
         if (collide(grid, piece)) {
           alert("Game Over");
-          grid.forEach(row => row.fill(null));
+          grid.fill(0); // Réinitialiser la grille
         }
       }
     }
 
+    // Vérifier et effacer les lignes complètes
     function clearLines() {
+      const fullRow = 0b1111111111; // 10 bits à 1
+
       for (let y = ROWS - 1; y >= 0; y--) {
-        if (grid[y].every(cell => cell)) {
-          grid.splice(y, 1);
-          grid.unshift(Array(COLS).fill(null));
-          y++;
+        // Si tous les 10 premiers bits sont à 1
+        if ((grid[y] & fullRow) === fullRow) {
+          // Supprimer cette ligne en décalant toutes les lignes au-dessus
+          for (let yy = y; yy > 0; yy--) {
+            grid[yy] = grid[yy - 1];
+          }
+          grid[0] = 0; // La ligne du haut devient vide
+          y++; // Réévaluer cette position car une nouvelle ligne y est descendue
         }
       }
     }
@@ -137,9 +186,27 @@
         dropCounter = 0;
       }
 
+      // Effacer le canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawMatrix(grid, { x: 0, y: 0 }, null);
-      drawMatrix(piece.shape, { x: piece.x, y: piece.y }, piece.color);
+
+      // Dessiner la grille
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          // Vérifier si le bit correspondant est activé dans la ligne de la grille
+          if (grid[y] & (1 << x)) {
+            drawTile(x, y, '#aaaaaa'); // Couleur des blocs placés
+          }
+        }
+      }
+
+      // Dessiner la pièce active
+      for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < 4; x++) {
+          if (piece.shape[y] & (1 << x)) {
+            drawTile(piece.x + x, piece.y + y, piece.color);
+          }
+        }
+      }
 
       requestAnimationFrame(update);
     }

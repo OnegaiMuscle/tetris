@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Tetris en tuiles</title>
+  <style>
+    canvas {
+      background: #111;
+      display: block;
+      margin: 20px auto;
+      image-rendering: pixelated;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="tetris" width="160" height="384"></canvas>
+
+  <script>
+    const canvas = document.getElementById('tetris');
+    const ctx = canvas.getContext('2d');
+
+    const COLS = 10;
+    const ROWS = 24;
+    const TILE = 16;
+    canvas.width = COLS * TILE;
+    canvas.height = ROWS * TILE;
+
+    // Pièces Tetris classiques
+    const SHAPES = {
+      I: [[1, 1, 1, 1]],
+      O: [[1, 1], [1, 1]],
+      T: [[0, 1, 0], [1, 1, 1]],
+      S: [[0, 1, 1], [1, 1, 0]],
+      Z: [[1, 1, 0], [0, 1, 1]],
+      J: [[1, 0, 0], [1, 1, 1]],
+      L: [[0, 0, 1], [1, 1, 1]],
+    };
+
+    const COLORS = {
+      I: '#0ff', O: '#ff0', T: '#f0f', S: '#0f0',
+      Z: '#f00', J: '#00f', L: '#fa0'
+    };
+
+    const grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+
+    function createPiece(type) {
+      return {
+        shape: SHAPES[type],
+        color: COLORS[type],
+        x: Math.floor(COLS / 2) - 1,
+        y: 0
+      };
+    }
+
+    let piece = createPiece(randomType());
+    let dropCounter = 0;
+    let dropInterval = 500;
+    let lastTime = 0;
+
+    function randomType() {
+      return Object.keys(SHAPES)[Math.floor(Math.random() * 7)];
+    }
+
+    function drawTile(x, y, color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+      ctx.strokeStyle = '#111';
+      ctx.strokeRect(x * TILE, y * TILE, TILE, TILE);
+    }
+
+    function drawMatrix(matrix, offset, color) {
+      matrix.forEach((row, y) =>
+        row.forEach((value, x) => {
+          if (value) drawTile(x + offset.x, y + offset.y, color);
+        })
+      );
+    }
+
+    function merge(grid, piece) {
+      piece.shape.forEach((row, y) =>
+        row.forEach((value, x) => {
+          if (value) {
+            grid[y + piece.y][x + piece.x] = piece.color;
+          }
+        })
+      );
+    }
+
+    function collide(grid, piece) {
+      return piece.shape.some((row, y) =>
+        row.some((value, x) =>
+          value && (
+            y + piece.y >= ROWS ||
+            x + piece.x < 0 ||
+            x + piece.x >= COLS ||
+            grid[y + piece.y]?.[x + piece.x]
+          )
+        )
+      );
+    }
+
+    function rotate(matrix) {
+      return matrix[0].map((_, i) => matrix.map(row => row[i]).reverse());
+    }
+
+    function drop() {
+      piece.y++;
+      if (collide(grid, piece)) {
+        piece.y--;
+        merge(grid, piece);
+        clearLines();
+        piece = createPiece(randomType());
+        if (collide(grid, piece)) {
+          alert("Game Over");
+          grid.forEach(row => row.fill(null));
+        }
+      }
+    }
+
+    function clearLines() {
+      for (let y = ROWS - 1; y >= 0; y--) {
+        if (grid[y].every(cell => cell)) {
+          grid.splice(y, 1);
+          grid.unshift(Array(COLS).fill(null));
+          y++;
+        }
+      }
+    }
+
+    function update(time = 0) {
+      const delta = time - lastTime;
+      lastTime = time;
+      dropCounter += delta;
+
+      if (dropCounter > dropInterval) {
+        drop();
+        dropCounter = 0;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      grid.forEach((row, y) => {
+        row.forEach((color, x) => {
+          if (color) drawTile(x, y, color);
+        });
+      });
+      drawMatrix(piece.shape, { x: piece.x, y: piece.y }, piece.color);
+
+      requestAnimationFrame(update);
+    }
+
+    document.addEventListener("keydown", e => {
+      if (e.key === "ArrowLeft") {
+        piece.x--;
+        if (collide(grid, piece)) piece.x++;
+      }
+      if (e.key === "ArrowRight") {
+        piece.x++;
+        if (collide(grid, piece)) piece.x--;
+      }
+      if (e.key === "ArrowDown") {
+        drop();
+        dropCounter = 0;
+      }
+      if (e.key === "z") {
+        const rotated = rotate(piece.shape);
+        const old = piece.shape;
+        piece.shape = rotated;
+        if (collide(grid, piece)) piece.shape = old;
+      }
+    });
+
+    update();
+  </script>
+</body>
+</html>
