@@ -4,40 +4,17 @@
   <meta charset="UTF-8">
   <title>Tetris Bitboard</title>
   <style>
-    body {
-      background: #708860;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      margin: 0;
-      font-family: 'Courier New', monospace;
-    }
     canvas {
       background: #c8e0c8; /* Couleur Game Boy */
       display: block;
+      margin: 20px auto;
       image-rendering: pixelated;
       border: 10px solid #8b9570;
-      border-radius: 2px;
-      box-shadow: 0 0 20px rgba(0,0,0,0.3);
-    }
-    .container {
-      text-align: center;
-    }
-    .controls {
-      margin-top: 10px;
-      color: white;
-      font-size: 14px;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <canvas id="tetris" width="160" height="384"></canvas>
-    <div class="controls">
-      ← → : Déplacer | ↓ : Accélérer | Z : Tourner
-    </div>
-  </div>
+  <canvas id="tetris" width="160" height="384"></canvas>
 
   <script>
     const canvas = document.getElementById('tetris');
@@ -49,17 +26,20 @@
     canvas.width = COLS * TILE;
     canvas.height = ROWS * TILE;
 
-    // Représentation des pièces en un seul entier 16-bit
-    // Format: 4 bits par ligne, 4 lignes = 16 bits
+    // Représentation des pièces en bitboards (4x4 bits max)
+    // Chaque ligne est représentée par un nombre entier
     const SHAPES = {
-      I: 0x0F00, // 0000 | 1111 | 0000 | 0000
-      O: 0x6600, // 0110 | 0110 | 0000 | 0000
-      T: 0x4E00, // 0100 | 1110 | 0000 | 0000
-      S: 0x6C00, // 0110 | 1100 | 0000 | 0000
-      Z: 0xC600, // 1100 | 0110 | 0000 | 0000
-      J: 0x8E00, // 1000 | 1110 | 0000 | 0000
-      L: 0x2E00  // 0010 | 1110 | 0000 | 0000
+      I: [0b0000, 0b1111, 0b0000, 0b0000], // ---- | #### | ---- | ----
+      O: [0b0110, 0b0110, 0b0000, 0b0000], // -##- | -##- | ---- | ----
+      T: [0b0100, 0b1110, 0b0000, 0b0000], // -#-- | ###- | ---- | ----
+      S: [0b0110, 0b1100, 0b0000, 0b0000], // -##- | ##-- | ---- | ----
+      Z: [0b1100, 0b0110, 0b0000, 0b0000], // ##-- | -##- | ---- | ----
+      J: [0b1000, 0b1110, 0b0000, 0b0000], // #--- | ###- | ---- | ----
+      L: [0b0010, 0b1110, 0b0000, 0b0000]  // --#- | ###- | ---- | ----
     };
+
+
+
 
     const COLORS = {
       I: '#0ff', O: '#ff0', T: '#f0f', S: '#0f0',
@@ -67,14 +47,8 @@
     };
 
     // La grille est un tableau de 24 entiers sur 16 bits (seuls 10 bits sont utilisés)
+    // Chaque ligne est un entier 16-bit où les 10 bits de poids faible représentent les colonnes
     let grid = new Array(ROWS).fill(0);
-    let score = 0;
-
-    // Extraire une ligne d'une pièce (0-3 en partant du haut)
-    function getRow(shape, row) {
-      // Décalage de (12 - row*4) bits vers la droite et masque avec 0xF
-      return (shape >> (12 - row*4)) & 0xF;
-    }
 
     function createPiece(type) {
       return {
@@ -100,23 +74,14 @@
       ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
       ctx.strokeStyle = '#111';
       ctx.strokeRect(x * TILE, y * TILE, TILE, TILE);
-
-      // Effet Game Boy : ombre intérieure
-      ctx.fillStyle = 'rgba(255,255,255,0.2)';
-      ctx.fillRect(x * TILE, y * TILE, TILE-2, 2);
-      ctx.fillRect(x * TILE, y * TILE, 2, TILE-2);
-
-      ctx.fillStyle = 'rgba(0,0,0,0.2)';
-      ctx.fillRect(x * TILE + 2, y * TILE + TILE - 2, TILE-2, 2);
-      ctx.fillRect(x * TILE + TILE - 2, y * TILE + 2, 2, TILE-2);
     }
 
-    // Dessiner une matrice de bits
+    // Dessiner une pièce ou la grille à partir d'un bitboard
     function drawBitboard(board, offsetX, offsetY, color) {
       for (let y = 0; y < board.length; y++) {
         let row = board[y];
         // Parcourir chaque bit de la ligne (de droite à gauche)
-        for (let x = 0; x < COLS; x++) {
+        for (let x = 0; x < 10; x++) {
           // Vérifier si le bit est activé (1 << x effectue un décalage de 1 bit de x positions)
           if (row & (1 << x)) {
             drawTile(offsetX + x, offsetY + y, color);
@@ -125,49 +90,37 @@
       }
     }
 
-    // Version corrigée de la fonction de collision
+    // Vérifier si la pièce entre en collision avec la grille ou les bords
     function collide(grid, piece) {
       for (let y = 0; y < 4; y++) {
+        // Pour chaque ligne de la pièce
         let rowY = piece.y + y;
+        if (rowY < 0) continue; // Ignorer les lignes au-dessus de la grille
 
-        // Extraire la ligne y de la pièce
-        let pieceRow = getRow(piece.shape, y);
-        if (pieceRow === 0) continue; // Ligne vide
+        // On ne vérifie que les bits non nuls de la pièce
+        if (piece.shape[y] === 0) continue;
 
-        // Si la pièce est en partie au-dessus de la grille, on continue
-        if (rowY < 0) continue;
-
-        // Si la pièce touche le fond de la grille
-        if (rowY >= ROWS) return true;
-
-        // Si la pièce est trop à gauche (x < 0)
-        if (piece.x < 0) {
-          // Vérifier si des bits actifs dépassent à gauche
-          // Par exemple, pour la pièce I, si x = -1, seuls les 3 bits de droite peuvent être dans la grille
-          let maxVisibleBits = 4 + piece.x; // Combien de bits peuvent être dans la grille
-          let leftBits = pieceRow & (0xF << maxVisibleBits); // Bits qui dépassent à gauche
-
-          if (leftBits) return true; // S'il y a des bits actifs qui dépassent à gauche
-
-          // Décaler vers la droite pour compenser et vérifier la collision avec la grille
-          let visibleBits = pieceRow & ((1 << maxVisibleBits) - 1); // Obtenir uniquement les bits visibles
-          let adjustedBits = visibleBits << (COLS - maxVisibleBits); // Positionner correctement ces bits
-
-          if (adjustedBits & grid[rowY]) return true;
+        if (rowY >= ROWS) {
+          // Collision avec le bas de la grille
+          return true;
         }
-        // Si la pièce est dans la grille ou dépasse à droite
-        else {
-          // Vérifier si la pièce dépasse sur la droite
-          if (piece.x + 4 > COLS) {
-            let rightBits = pieceRow & ((1 << (piece.x + 4 - COLS)) - 1); // Bits qui dépassent à droite
-            if (rightBits) return true; // S'il y a des bits actifs qui dépassent à droite
+
+        // Vérifier les bords latéraux
+        for (let x = 0; x < 4; x++) {
+          if (piece.shape[y] & (1 << x)) { // Si ce bit est activé dans la pièce
+            let pieceX = piece.x + x;
+
+            // Vérifier si le bloc est en dehors des limites horizontales
+            if (pieceX < 0 || pieceX >= COLS) {
+              return true;
+            }
+
+            // Vérifier la collision avec des blocs existants
+            // On utilise (1 << pieceX) pour obtenir un bit à la position exacte dans la grille
+            if (grid[rowY] & (1 << pieceX)) {
+              return true;
+            }
           }
-
-          // Décaler la ligne de la pièce à sa position X
-          let adjustedPieceRow = pieceRow << piece.x;
-
-          // Vérifier la collision avec des blocs existants
-          if (adjustedPieceRow & grid[rowY]) return true;
         }
       }
       return false;
@@ -176,42 +129,36 @@
     // Fusionner la pièce avec la grille
     function merge(grid, piece) {
       for (let y = 0; y < 4; y++) {
-        if (piece.y + y >= 0 && piece.y + y < ROWS) {
-          // Extraire la ligne y de la pièce
-          let pieceRow = getRow(piece.shape, y);
+        if (piece.y + y >= 0 && piece.y + y < ROWS) { // Vérifier les limites verticales
+          // Au lieu de décaler toute la ligne, traiter chaque bloc individuellement
+          for (let x = 0; x < 4; x++) {
+            // Vérifier si ce bit est activé dans la pièce
+            if (piece.shape[y] & (1 << x)) {
+              // Calculer la position dans la grille
+              let pieceX = piece.x + x;
 
-          // Si la pièce est trop à gauche (x < 0)
-          if (piece.x < 0) {
-            let maxVisibleBits = 4 + piece.x; // Combien de bits peuvent être dans la grille
-            let visibleBits = pieceRow & ((1 << maxVisibleBits) - 1); // Obtenir uniquement les bits visibles
-            grid[piece.y + y] |= (visibleBits << (COLS - maxVisibleBits));
-          }
-          // Si la pièce est dans la grille ou dépasse à droite
-          else {
-            let adjustedPieceRow = pieceRow << piece.x;
-            // Ne conserver que les bits qui sont dans la grille
-            adjustedPieceRow &= ((1 << COLS) - 1);
-            grid[piece.y + y] |= adjustedPieceRow;
+              // Ne fusionner que si le bloc est dans les limites horizontales
+              if (pieceX >= 0 && pieceX < COLS) {
+                // Utiliser OR binaire pour ajouter le bloc à la grille
+                grid[piece.y + y] |= (1 << pieceX);
+              }
+            }
           }
         }
       }
     }
 
-    // Rotation de la pièce en utilisant uniquement des opérations bitwise
-    function rotate(shape) {
-      let result = 0;
+    // Rotation de la pièce en utilisant des opérations bitwise
+    function rotate(pieceShape) {
+      let result = [0, 0, 0, 0];
 
-      // Pour chaque position de bit dans la grille 4x4
+      // Pour chaque bit dans la matrice 4x4
       for (let y = 0; y < 4; y++) {
         for (let x = 0; x < 4; x++) {
-          // Calculer la position du bit dans l'entier 16-bit
-          let fromPos = y * 4 + x;
-          // Calculer la nouvelle position après rotation (90° sens horaire)
-          let toPos = x * 4 + (3 - y);
-
-          // Si le bit original est activé, l'activer dans le résultat
-          if (shape & (1 << (15 - fromPos))) {
-            result |= (1 << (15 - toPos));
+          // Si le bit est activé à la position (y, x)
+          if (pieceShape[y] & (1 << x)) {
+            // Activez le bit correspondant à la position (x, 3-y) dans le résultat
+            result[x] |= (1 << (3 - y));
           }
         }
       }
@@ -219,33 +166,31 @@
       return result;
     }
 
-        function drop() {
+    function drop() {
       piece.y++;
-
       if (collide(grid, piece)) {
-        // La pièce a touché quelque chose
-        piece.y--; // On annule le mouvement
+        piece.y--; // Revenir à la position valide précédente
 
-        // On sauvegarde temporairement l'état actuel de la pièce
-        const currentShape = piece.shape;
+        // Sauvegarder l'état actuel de la pièce avant fusion
+        const currentPieceShape = [...piece.shape]; // Copie profonde du tableau
         const currentX = piece.x;
         const currentY = piece.y;
 
-        // On fusionne la pièce avec la grille
-        merge(grid, piece);
+        // Utiliser les valeurs sauvegardées pour la fusion
+        merge(grid, {
+          shape: currentPieceShape,
+          x: currentX,
+          y: currentY
+        });
 
-        // Vérifier et effacer les lignes complètes
-        const linesCleared = clearLines();
-        score += linesCleared * 100;
+        clearLines();
 
-        // Créer une nouvelle pièce *après* avoir fusionné l'ancienne
+        // Créer une nouvelle pièce
         piece = createPiece(randomType());
 
-        // Vérifier si la nouvelle pièce est en collision (Game Over)
         if (collide(grid, piece)) {
-          alert("Game Over - Score: " + score);
+          alert("Game Over");
           grid.fill(0); // Réinitialiser la grille
-          score = 0;
         }
       }
     }
@@ -253,13 +198,10 @@
     // Vérifier et effacer les lignes complètes
     function clearLines() {
       const fullRow = 0b1111111111; // 10 bits à 1
-      let linesCleared = 0;
 
       for (let y = ROWS - 1; y >= 0; y--) {
         // Si tous les 10 premiers bits sont à 1
         if ((grid[y] & fullRow) === fullRow) {
-          linesCleared++;
-
           // Supprimer cette ligne en décalant toutes les lignes au-dessus
           for (let yy = y; yy > 0; yy--) {
             grid[yy] = grid[yy - 1];
@@ -268,8 +210,6 @@
           y++; // Réévaluer cette position car une nouvelle ligne y est descendue
         }
       }
-
-      return linesCleared;
     }
 
     function update(time = 0) {
@@ -285,27 +225,30 @@
       // Effacer le canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Dessiner la grille en utilisant drawBitboard
-      drawBitboard(grid, 0, 0, '#aaaaaa');
-
-      // Dessiner la pièce active
-      for (let y = 0; y < 4; y++) {
-        let pieceRow = getRow(piece.shape, y);
-
-        for (let x = 0; x < 4; x++) {
-          if (pieceRow & (1 << (3-x))) { // Note: inversion pour la correspondance visuelle
-            // Vérifier si le bloc est dans les limites du canvas
-            if (piece.x + x >= 0 && piece.x + x < COLS && piece.y + y >= 0) {
-              drawTile(piece.x + x, piece.y + y, piece.color);
-            }
+      // Dessiner la grille
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          // Vérifier si le bit correspondant est activé dans la ligne de la grille
+          if (grid[y] & (1 << x)) {
+            drawTile(x, y, '#aaaaaa'); // Couleur des blocs placés
           }
         }
       }
 
-      // Afficher le score
-      ctx.fillStyle = "#000";
-      ctx.font = "12px monospace";
-      ctx.fillText("Score: " + score, 4, 12);
+      // Dessiner la pièce active
+      for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < 4; x++) {
+          if (piece.shape[y] & (1 << x)) {
+            // Ne dessiner que si le bloc est dans les limites du canvas
+            let pieceX = piece.x + x;
+            let pieceY = piece.y + y;
+
+            if (pieceX >= 0 && pieceX < COLS && pieceY >= 0 && pieceY < ROWS) {
+              drawTile(pieceX, pieceY, piece.color);
+            }
+          }
+        }
+      }
 
       requestAnimationFrame(update);
     }
@@ -324,34 +267,33 @@
         dropCounter = 0;
       }
       if (e.key === "z") {
-        const oldShape = piece.shape;
+        const oldShape = [...piece.shape]; // Copie profonde
         const oldX = piece.x;
         const oldY = piece.y;
 
+        // Appliquer la rotation
         piece.shape = rotate(piece.shape);
 
-        // Correction de l'excentrement pour certaines pièces
-        // Tester différentes positions pour trouver une valide après rotation
-        const positions = [0, -1, 1, -2, 2];
+        // Essayer différentes positions horizontales (wall kick)
+        const wallKickOffsets = [0, -1, 1, -2, 2];
+        let rotationSuccessful = false;
 
-        let rotationSucceeded = false;
-
-        for (let i = 0; i < positions.length; i++) {
-          piece.x += positions[i];
+        for (let i = 0; i < wallKickOffsets.length; i++) {
+          const testX = piece.x + wallKickOffsets[i];
+          piece.x = testX;
 
           if (!collide(grid, piece)) {
-            rotationSucceeded = true;
+            rotationSuccessful = true;
             break;
           }
 
-          piece.x -= positions[i];
+          // Restaurer la position X si ce décalage ne fonctionne pas
+          piece.x = oldX;
         }
 
-        if (!rotationSucceeded) {
-          // Si aucune position ne fonctionne, annuler la rotation
+        // Si aucune position ne fonctionne, annuler la rotation
+        if (!rotationSuccessful) {
           piece.shape = oldShape;
-          piece.x = oldX;
-          piece.y = oldY;
         }
       }
     });
