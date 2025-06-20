@@ -25,88 +25,17 @@
     const TILE = 16;
     canvas.width = COLS * TILE;
     canvas.height = ROWS * TILE;
-    // Représentation des pièces avec toutes les rotations précalculées
-    // Pour chaque type de pièce, 4 rotations (0°, 90°, 180°, 270°)
-    // Chaque rotation est représentée par un tableau de 4 lignes
-    const SHAPES_ROTATIONS = {
-      I: [
-        // Rotation 0° (horizontale)
-        [0b0000, 0b1111, 0b0000, 0b0000], // ---- | #### | ---- | ----
-        // Rotation 90° (verticale)
-        [0b0010, 0b0010, 0b0010, 0b0010], // --#- | --#- | --#- | --#-
-        // Rotation 180° (horizontale, même que 0°)
-        [0b0000, 0b0000, 0b1111, 0b0000], // ---- | ---- | #### | ----
-        // Rotation 270° (verticale, même que 90°)
-        [0b0100, 0b0100, 0b0100, 0b0100]  // -#-- | -#-- | -#-- | -#--
-      ],
-      O: [
-        // Le carré est le même dans toutes les rotations
-        [0b0110, 0b0110, 0b0000, 0b0000], // -##- | -##- | ---- | ----
-        [0b0110, 0b0110, 0b0000, 0b0000], // -##- | -##- | ---- | ----
-        [0b0110, 0b0110, 0b0000, 0b0000], // -##- | -##- | ---- | ----
-        [0b0110, 0b0110, 0b0000, 0b0000]  // -##- | -##- | ---- | ----
-      ],
-      T: [
-        // Rotation 0° (T vers le haut)
-        [0b0100, 0b1110, 0b0000, 0b0000], // -#-- | ###- | ---- | ----
-        // Rotation 90° (T vers la droite)
-        [0b0100, 0b0110, 0b0100, 0b0000], // -#-- | -##- | -#-- | ----
-        // Rotation 180° (T vers le bas)
-        [0b0000, 0b1110, 0b0100, 0b0000], // ---- | ###- | -#-- | ----
-        // Rotation 270° (T vers la gauche)
-        [0b0100, 0b1100, 0b0100, 0b0000]  // -#-- | ##-- | -#-- | ----
-      ],
-      S: [
-        // Rotation 0° (S horizontale)
-        [0b0110, 0b1100, 0b0000, 0b0000], // -##- | ##-- | ---- | ----
-        // Rotation 90° (S verticale)
-        [0b0100, 0b0110, 0b0010, 0b0000], // -#-- | -##- | --#- | ----
-        // Rotation 180° (S horizontale, même que 0°)
-        [0b0000, 0b0110, 0b1100, 0b0000], // ---- | -##- | ##-- | ----
-        // Rotation 270° (S verticale, même que 90°)
-        [0b1000, 0b1100, 0b0100, 0b0000]  // #--- | ##-- | -#-- | ----
-      ],
-      Z: [
-        // Rotation 0° (Z horizontale)
-        [0b1100, 0b0110, 0b0000, 0b0000], // ##-- | -##- | ---- | ----
-        // Rotation 90° (Z verticale)
-        [0b0100, 0b1100, 0b1000, 0b0000]  // -#-- | ##-- | #--- | ----
-        // Rotation 180° (Z horizontale, même que 0°)
-        [0b0000, 0b1100, 0b0110, 0b0000], // ---- | ##-- | -##- | ----
-        // Rotation 270° (Z verticale, même que 90°)
-        [0b0010, 0b0110, 0b0100, 0b0000], // --#- | -##- | -#-- | ----
-      ],
-      J: [
-        // Rotation 0°
-        [0b1110, 0b0010, 0b0000, 0b0000], // ###- | --#- | ---- | ----
-        // Rotation 90°
-        [0b1100, 0b1000, 0b1000, 0b0000], // ##-- | #--- | #--- | ----
-        // Rotation 180°
-        [0b0000, 0b1000, 0b1110, 0b0000], // ---- | #--- | ###- | ----
-        // Rotation 270°
-        [0b0010, 0b0010, 0b0110, 0b0000]  // --#- | --#- | -##- | ----
-      ],
-      L: [
-        // Rotation 0°
-        [0b1110, 0b1000, 0b0000, 0b0000], // ###- | #--- | ---- | ----
-        // Rotation 90°
-        [0b0110, 0b0010, 0b0010, 0b0000], // -##- | --#- | --#- | ----
-        // Rotation 180°
-        [0b0000, 0b0010, 0b1110, 0b0000], // ---- | --#- | ###- | ----
-        // Rotation 270°
-        [0b1000, 0b1000, 0b1100, 0b0000]  // #--- | #--- | ##-- | ----
-      ]
-    };
 
-    // Version simplifiée pour la création initiale des pièces
+    // Représentation des pièces en bitboards (4x4 bits max)
+    // Chaque ligne est représentée par un nombre entier
     const SHAPES = {
-      I: SHAPES_ROTATIONS.I[0],
-      O: SHAPES_ROTATIONS.O[0],
-      T: SHAPES_ROTATIONS.T[0],
-      S: SHAPES_ROTATIONS.S[0],
-      Z: SHAPES_ROTATIONS.Z[0],
-      J: SHAPES_ROTATIONS.J[0],
-      L: SHAPES_ROTATIONS.L[0]
+      I: [0b0000, 0b1111, 0b0000, 0b0000], // ---- | #### | ---- | ----
+      O: [0b0110, 0b0110, 0b0000, 0b0000], // -##- | -##- | ---- | ----
+      T: [0b0100, 0b1110, 0b0000, 0b0000], // -#-- | ###- | ---- | ----
+      S: [0b0110, 0b1100, 0b0000, 0b0000], // -##- | ##-- | ---- | ----
+      Z: [0b1100, 0b0110, 0b0000, 0b0000], // ##-- | -##- | ---- | ----
+      J: [0b1000, 0b1110, 0b0000, 0b0000], // #--- | ###- | ---- | ----
+      L: [0b0010, 0b1110, 0b0000, 0b0000]  // --#- | ###- | ---- | ----
     };
 
 
@@ -123,8 +52,6 @@
 
     function createPiece(type) {
       return {
-        type: type,
-        rotation: 0, // L'index de rotation (0, 1, 2, 3)
         shape: SHAPES[type],
         color: COLORS[type],
         x: 3, // Position centrée
@@ -221,20 +148,22 @@
       }
     }
 
-    // Rotation de la pièce en utilisant les formes précalculées
-    function rotate(piece) {
-      // Utiliser le modulo pour obtenir la prochaine rotation (0->1->2->3->0)
-      const nextRotation = (piece.rotation + 1) % 4;
+    // Rotation de la pièce en utilisant des opérations bitwise
+    function rotate(pieceShape) {
+      let result = [0, 0, 0, 0];
 
-      // Retourner la forme précalculée pour cette rotation
-      return {
-        type: piece.type,
-        rotation: nextRotation,
-        shape: SHAPES_ROTATIONS[piece.type][nextRotation],
-        color: piece.color,
-        x: piece.x,
-        y: piece.y
-      };
+      // Pour chaque bit dans la matrice 4x4
+      for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < 4; x++) {
+          // Si le bit est activé à la position (y, x)
+          if (pieceShape[y] & (1 << x)) {
+            // Activez le bit correspondant à la position (x, 3-y) dans le résultat
+            result[x] |= (1 << (3 - y));
+          }
+        }
+      }
+
+      return result;
     }
 
     function drop() {
@@ -338,22 +267,12 @@
         dropCounter = 0;
       }
       if (e.key === "z") {
-        // Sauvegarder l'état actuel pour pouvoir revenir en arrière si besoin
-        const oldPiece = {
-          type: piece.type,
-          rotation: piece.rotation,
-          shape: [...piece.shape], // Copie profonde
-          color: piece.color,
-          x: piece.x,
-          y: piece.y
-        };
+        const oldShape = [...piece.shape]; // Copie profonde
+        const oldX = piece.x;
+        const oldY = piece.y;
 
-        // Appliquer la rotation avec le nouveau système
-        const rotatedPiece = rotate(piece);
-
-        // Mettre à jour la pièce avec les valeurs de rotation
-        piece.rotation = rotatedPiece.rotation;
-        piece.shape = rotatedPiece.shape;
+        // Appliquer la rotation
+        piece.shape = rotate(piece.shape);
 
         // Essayer différentes positions horizontales (wall kick)
         const wallKickOffsets = [0, -1, 1, -2, 2];
@@ -369,13 +288,12 @@
           }
 
           // Restaurer la position X si ce décalage ne fonctionne pas
-          piece.x = oldPiece.x;
+          piece.x = oldX;
         }
 
-        // Si aucune position ne fonctionne, restaurer la pièce complètement
+        // Si aucune position ne fonctionne, annuler la rotation
         if (!rotationSuccessful) {
-          piece.rotation = oldPiece.rotation;
-          piece.shape = oldPiece.shape;
+          piece.shape = oldShape;
         }
       }
     });
