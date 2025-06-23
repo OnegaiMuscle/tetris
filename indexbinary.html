@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Tetris Bitboard</title>
+  <style>
+    canvas {
+      background: #c8e0c8; /* Couleur Game Boy */
+      display: block;
+      margin: 20px auto;
+      image-rendering: pixelated;
+      border: 10px solid #8b9570;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="tetris" width="160" height="384"></canvas>
+
+  <script>
+    const canvas = document.getElementById('tetris');
+    const ctx = canvas.getContext('2d');
+
+    const COLS = 10;
+    const ROWS = 24;
+    const TILE = 16;
+    canvas.width = COLS * TILE;
+    canvas.height = ROWS * TILE;
+    // Représentation des pièces avec toutes les rotations précalculées
+    // Pour chaque type de pièce, 4 rotations (0°, 90°, 180°, 270°)
+    // Chaque rotation est représentée par un tableau de 4 lignes
+    const SHAPES_ROTATIONS = {
+      I: [
+        // Rotation 0° (horizontale)
+        [0b0000, 0b1111, 0b0000, 0b0000], // ---- | #### | ---- | ----
+        // Rotation 90° (verticale)
+        [0b0010, 0b0010, 0b0010, 0b0010], // --#- | --#- | --#- | --#-
+        // Rotation 180° (horizontale, même que 0°)
+        [0b0000, 0b0000, 0b1111, 0b0000], // ---- | ---- | #### | ----
+        // Rotation 270° (verticale, même que 90°)
+        [0b0100, 0b0100, 0b0100, 0b0100]  // -#-- | -#-- | -#-- | -#--
+      ],
+      O: [
+        // Le carré est le même dans toutes les rotations
+        [0b0110, 0b0110, 0b0000, 0b0000], // -##- | -##- | ---- | ----
+        [0b0110, 0b0110, 0b0000, 0b0000], // -##- | -##- | ---- | ----
+        [0b0110, 0b0110, 0b0000, 0b0000], // -##- | -##- | ---- | ----
+        [0b0110, 0b0110, 0b0000, 0b0000]  // -##- | -##- | ---- | ----
+      ],
+      T: [
+        // Rotation 0° (T vers le haut)
+        [0b0100, 0b1110, 0b0000, 0b0000], // -#-- | ###- | ---- | ----
+        // Rotation 90° (T vers la droite)
+        [0b0100, 0b0110, 0b0100, 0b0000], // -#-- | -##- | -#-- | ----
+        // Rotation 180° (T vers le bas)
+        [0b0000, 0b1110, 0b0100, 0b0000], // ---- | ###- | -#-- | ----
+        // Rotation 270° (T vers la gauche)
+        [0b0100, 0b1100, 0b0100, 0b0000]  // -#-- | ##-- | -#-- | ----
+      ],
+      S: [
+        // Rotation 0° (S horizontale)
+        [0b0110, 0b1100, 0b0000, 0b0000], // -##- | ##-- | ---- | ----
+        // Rotation 90° (S verticale)
+        [0b0100, 0b0110, 0b0010, 0b0000], // -#-- | -##- | --#- | ----
+        // Rotation 180° (S horizontale, même que 0°)
+        [0b0000, 0b0110, 0b1100, 0b0000], // ---- | -##- | ##-- | ----
+        // Rotation 270° (S verticale, même que 90°)
+        [0b1000, 0b1100, 0b0100, 0b0000]  // #--- | ##-- | -#-- | ----
+      ],
+      Z: [
+        // Rotation 0° (Z horizontale)
+        [0b1100, 0b0110, 0b0000, 0b0000], // ##-- | -##- | ---- | ----
+        // Rotation 90° (Z verticale)
+        [0b0100, 0b1100, 0b1000, 0b0000]  // -#-- | ##-- | #--- | ----
+        // Rotation 180° (Z horizontale, même que 0°)
+        [0b0000, 0b1100, 0b0110, 0b0000], // ---- | ##-- | -##- | ----
+        // Rotation 270° (Z verticale, même que 90°)
+        [0b0010, 0b0110, 0b0100, 0b0000], // --#- | -##- | -#-- | ----
+      ],
+      J: [
+        // Rotation 0°
+        [0b1110, 0b0010, 0b0000, 0b0000], // ###- | --#- | ---- | ----
+        // Rotation 90°
+        [0b1100, 0b1000, 0b1000, 0b0000], // ##-- | #--- | #--- | ----
+        // Rotation 180°
+        [0b0000, 0b1000, 0b1110, 0b0000], // ---- | #--- | ###- | ----
+        // Rotation 270°
+        [0b0010, 0b0010, 0b0110, 0b0000]  // --#- | --#- | -##- | ----
+      ],
+      L: [
+        // Rotation 0°
+        [0b1110, 0b1000, 0b0000, 0b0000], // ###- | #--- | ---- | ----
+        // Rotation 90°
+        [0b0110, 0b0010, 0b0010, 0b0000], // -##- | --#- | --#- | ----
+        // Rotation 180°
+        [0b0000, 0b0010, 0b1110, 0b0000], // ---- | --#- | ###- | ----
+        // Rotation 270°
+        [0b1000, 0b1000, 0b1100, 0b0000]  // #--- | #--- | ##-- | ----
+      ]
+    };
+
+    // Version simplifiée pour la création initiale des pièces
+    const SHAPES = {
+      I: SHAPES_ROTATIONS.I[0],
+      O: SHAPES_ROTATIONS.O[0],
+      T: SHAPES_ROTATIONS.T[0],
+      S: SHAPES_ROTATIONS.S[0],
+      Z: SHAPES_ROTATIONS.Z[0],
+      J: SHAPES_ROTATIONS.J[0],
+      L: SHAPES_ROTATIONS.L[0]
+    };
+
+
+
+
+    const COLORS = {
+      I: '#0ff', O: '#ff0', T: '#f0f', S: '#0f0',
+      Z: '#f00', J: '#00f', L: '#fa0'
+    };
+
+    // La grille est un tableau de 24 entiers sur 16 bits (seuls 10 bits sont utilisés)
+    // Chaque ligne est un entier 16-bit où les 10 bits de poids faible représentent les colonnes
+    let grid = new Array(ROWS).fill(0);
+
+    function createPiece(type) {
+      return {
+        type: type,
+        rotation: 0, // L'index de rotation (0, 1, 2, 3)
+        shape: SHAPES[type],
+        color: COLORS[type],
+        x: 3, // Position centrée
+        y: 0
+      };
+    }
+
+    let piece = createPiece(randomType());
+    let dropCounter = 0;
+    let dropInterval = 500;
+    let lastTime = 0;
+
+    function randomType() {
+      return Object.keys(SHAPES)[Math.floor(Math.random() * 7)];
+    }
+
+    // Dessiner un bloc simple
+    function drawTile(x, y, color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+      ctx.strokeStyle = '#111';
+      ctx.strokeRect(x * TILE, y * TILE, TILE, TILE);
+    }
+
+    // Dessiner une pièce ou la grille à partir d'un bitboard
+    function drawBitboard(board, offsetX, offsetY, color) {
+      for (let y = 0; y < board.length; y++) {
+        let row = board[y];
+        // Parcourir chaque bit de la ligne (de droite à gauche)
+        for (let x = 0; x < 10; x++) {
+          // Vérifier si le bit est activé (1 << x effectue un décalage de 1 bit de x positions)
+          if (row & (1 << x)) {
+            drawTile(offsetX + x, offsetY + y, color);
+          }
+        }
+      }
+    }
+
+    // Vérifier si la pièce entre en collision avec la grille ou les bords
+    function collide(grid, piece) {
+      for (let y = 0; y < 4; y++) {
+        // Pour chaque ligne de la pièce
+        let rowY = piece.y + y;
+        if (rowY < 0) continue; // Ignorer les lignes au-dessus de la grille
+
+        // On ne vérifie que les bits non nuls de la pièce
+        if (piece.shape[y] === 0) continue;
+
+        if (rowY >= ROWS) {
+          // Collision avec le bas de la grille
+          return true;
+        }
+
+        // Vérifier les bords latéraux
+        for (let x = 0; x < 4; x++) {
+          if (piece.shape[y] & (1 << x)) { // Si ce bit est activé dans la pièce
+            let pieceX = piece.x + x;
+
+            // Vérifier si le bloc est en dehors des limites horizontales
+            if (pieceX < 0 || pieceX >= COLS) {
+              return true;
+            }
+
+            // Vérifier la collision avec des blocs existants
+            // On utilise (1 << pieceX) pour obtenir un bit à la position exacte dans la grille
+            if (grid[rowY] & (1 << pieceX)) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    }
+
+    // Fusionner la pièce avec la grille
+    function merge(grid, piece) {
+      for (let y = 0; y < 4; y++) {
+        if (piece.y + y >= 0 && piece.y + y < ROWS) { // Vérifier les limites verticales
+          // Au lieu de décaler toute la ligne, traiter chaque bloc individuellement
+          for (let x = 0; x < 4; x++) {
+            // Vérifier si ce bit est activé dans la pièce
+            if (piece.shape[y] & (1 << x)) {
+              // Calculer la position dans la grille
+              let pieceX = piece.x + x;
+
+              // Ne fusionner que si le bloc est dans les limites horizontales
+              if (pieceX >= 0 && pieceX < COLS) {
+                // Utiliser OR binaire pour ajouter le bloc à la grille
+                grid[piece.y + y] |= (1 << pieceX);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Rotation de la pièce en utilisant les formes précalculées
+    function rotate(piece) {
+      // Utiliser le modulo pour obtenir la prochaine rotation (0->1->2->3->0)
+      const nextRotation = (piece.rotation + 1) % 4;
+
+      // Retourner la forme précalculée pour cette rotation
+      return {
+        type: piece.type,
+        rotation: nextRotation,
+        shape: SHAPES_ROTATIONS[piece.type][nextRotation],
+        color: piece.color,
+        x: piece.x,
+        y: piece.y
+      };
+    }
+
+    function drop() {
+      piece.y++;
+      if (collide(grid, piece)) {
+        piece.y--; // Revenir à la position valide précédente
+
+        // Sauvegarder l'état actuel de la pièce avant fusion
+        const currentPieceShape = [...piece.shape]; // Copie profonde du tableau
+        const currentX = piece.x;
+        const currentY = piece.y;
+
+        // Utiliser les valeurs sauvegardées pour la fusion
+        merge(grid, {
+          shape: currentPieceShape,
+          x: currentX,
+          y: currentY
+        });
+
+        clearLines();
+
+        // Créer une nouvelle pièce
+        piece = createPiece(randomType());
+
+        if (collide(grid, piece)) {
+          alert("Game Over");
+          grid.fill(0); // Réinitialiser la grille
+        }
+      }
+    }
+
+    // Vérifier et effacer les lignes complètes
+    function clearLines() {
+      const fullRow = 0b1111111111; // 10 bits à 1
+
+      for (let y = ROWS - 1; y >= 0; y--) {
+        // Si tous les 10 premiers bits sont à 1
+        if ((grid[y] & fullRow) === fullRow) {
+          // Supprimer cette ligne en décalant toutes les lignes au-dessus
+          for (let yy = y; yy > 0; yy--) {
+            grid[yy] = grid[yy - 1];
+          }
+          grid[0] = 0; // La ligne du haut devient vide
+          y++; // Réévaluer cette position car une nouvelle ligne y est descendue
+        }
+      }
+    }
+
+    function update(time = 0) {
+      const delta = time - lastTime;
+      lastTime = time;
+      dropCounter += delta;
+
+      if (dropCounter > dropInterval) {
+        drop();
+        dropCounter = 0;
+      }
+
+      // Effacer le canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Dessiner la grille
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          // Vérifier si le bit correspondant est activé dans la ligne de la grille
+          if (grid[y] & (1 << x)) {
+            drawTile(x, y, '#aaaaaa'); // Couleur des blocs placés
+          }
+        }
+      }
+
+      // Dessiner la pièce active
+      for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < 4; x++) {
+          if (piece.shape[y] & (1 << x)) {
+            // Ne dessiner que si le bloc est dans les limites du canvas
+            let pieceX = piece.x + x;
+            let pieceY = piece.y + y;
+
+            if (pieceX >= 0 && pieceX < COLS && pieceY >= 0 && pieceY < ROWS) {
+              drawTile(pieceX, pieceY, piece.color);
+            }
+          }
+        }
+      }
+
+      requestAnimationFrame(update);
+    }
+
+    document.addEventListener("keydown", e => {
+      if (e.key === "ArrowLeft") {
+        piece.x--;
+        if (collide(grid, piece)) piece.x++;
+      }
+      if (e.key === "ArrowRight") {
+        piece.x++;
+        if (collide(grid, piece)) piece.x--;
+      }
+      if (e.key === "ArrowDown") {
+        drop();
+        dropCounter = 0;
+      }
+      if (e.key === "z") {
+        // Sauvegarder l'état actuel pour pouvoir revenir en arrière si besoin
+        const oldPiece = {
+          type: piece.type,
+          rotation: piece.rotation,
+          shape: [...piece.shape], // Copie profonde
+          color: piece.color,
+          x: piece.x,
+          y: piece.y
+        };
+
+        // Appliquer la rotation avec le nouveau système
+        const rotatedPiece = rotate(piece);
+
+        // Mettre à jour la pièce avec les valeurs de rotation
+        piece.rotation = rotatedPiece.rotation;
+        piece.shape = rotatedPiece.shape;
+
+        // Essayer différentes positions horizontales (wall kick)
+        const wallKickOffsets = [0, -1, 1, -2, 2];
+        let rotationSuccessful = false;
+
+        for (let i = 0; i < wallKickOffsets.length; i++) {
+          const testX = piece.x + wallKickOffsets[i];
+          piece.x = testX;
+
+          if (!collide(grid, piece)) {
+            rotationSuccessful = true;
+            break;
+          }
+
+          // Restaurer la position X si ce décalage ne fonctionne pas
+          piece.x = oldPiece.x;
+        }
+
+        // Si aucune position ne fonctionne, restaurer la pièce complètement
+        if (!rotationSuccessful) {
+          piece.rotation = oldPiece.rotation;
+          piece.shape = oldPiece.shape;
+        }
+      }
+    });
+
+    update();
+  </script>
+</body>
+</html>
