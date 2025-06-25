@@ -1,665 +1,571 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tetris JS</title>
+    <title>Functional Tetris</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Styles spécifiques pour le jeu */
-        .game-container {
-            perspective: 1000px;
-        }
-        .tetris-board {
-            background-color: rgba(0, 0, 0, 0.2);
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
-        }
         .cell {
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-sizing: border-box;
+            width: 30px;
+            height: 30px;
+            border: 1px solid #333;
         }
-        .I { background-color: #00F0F0; }
-        .O { background-color: #F0F000; }
-        .T { background-color: #A000F0; }
-        .S { background-color: #00F000; }
-        .Z { background-color: #F00000; }
-        .J { background-color: #0000F0; }
-        .L { background-color: #F0A000; }
-        .ghost { opacity: 0.3; }
-        @keyframes flash {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        .flash-row {
-            animation: flash 0.5s 2;
+
+        .cell-0 { background-color: #111827; } /* empty */
+        .cell-1 { background-color: #3B82F6; } /* I */
+        .cell-2 { background-color: #10B981; } /* J */
+        .cell-3 { background-color: #F59E0B; } /* L */
+        .cell-4 { background-color: #6366F1; } /* O */
+        .cell-5 { background-color: #EC4899; } /* S */
+        .cell-6 { background-color: #8B5CF6; } /* T */
+        .cell-7 { background-color: #EF4444; } /* Z */
+
+        @media (max-width: 768px) {
+            .cell {
+                width: 20px;
+                height: 20px;
+            }
         }
     </style>
 </head>
-<body class="bg-gray-900 text-white font-mono min-h-screen flex flex-col items-center justify-center p-4">
-    <div class="max-w-4xl w-full flex flex-col items-center">
-        <h1 class="text-4xl font-bold mb-2 text-cyan-400 tracking-wider">TETRIS JS</h1>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center p-4">
+    <h1 class="text-4xl font-bold mb-8 text-center">Functional Tetris</h1>
 
-        <div class="flex flex-col md:flex-row w-full items-center md:items-start justify-center gap-6 mb-8">
-            <!-- Tableau de jeu principal -->
-            <div class="game-container mb-4 md:mb-0">
-                <div class="tetris-board w-[300px] h-[600px] grid grid-cols-10 grid-rows-20 rounded-md relative overflow-hidden">
-                    <!-- Le tableau sera généré dynamiquement par JavaScript -->
-                </div>
+    <div class="flex flex-col md:flex-row items-center gap-8">
+        <!-- Game Board -->
+        <div id="game-board" class="bg-gray-800 border-2 border-gray-700 relative"></div>
+
+        <!-- Side Panel -->
+        <div class="flex flex-col items-center gap-4">
+            <div>
+                <h2 class="text-xl font-semibold mb-2">Next Piece</h2>
+                <div id="next-piece" class="bg-gray-800 border-2 border-gray-700 p-2"></div>
             </div>
 
-            <!-- Panneau latéral -->
-            <div class="flex flex-col items-center w-full md:w-auto">
-                <div class="bg-gray-800 p-4 rounded-lg w-full mb-4">
-                    <div class="text-xl font-bold mb-2 text-center">Score</div>
-                    <div id="score" class="text-3xl text-center font-bold text-yellow-400">0</div>
+            <div class="text-center">
+                <p class="text-xl mb-2">Score: <span id="score">0</span></p>
+                <p class="text-xl mb-4">Level: <span id="level">1</span></p>
 
-                    <div class="mt-6 text-lg font-bold mb-2 text-center">Niveau</div>
-                    <div id="level" class="text-2xl text-center font-bold text-green-400">1</div>
-
-                    <div class="mt-6 text-lg font-bold mb-2 text-center">Lignes</div>
-                    <div id="lines" class="text-2xl text-center font-bold text-blue-400">0</div>
-                </div>
-
-                <div class="bg-gray-800 p-4 rounded-lg w-full mb-4">
-                    <div class="text-xl font-bold mb-3 text-center">Prochain</div>
-                    <div id="next-piece" class="w-[120px] h-[120px] grid grid-cols-4 grid-rows-4 mx-auto"></div>
-                </div>
-
-                <div class="flex flex-col space-y-4 w-full">
-                    <button id="start-btn" class="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded font-bold transition">
-                        Démarrer
-                    </button>
-                    <button id="pause-btn" class="bg-yellow-600 hover:bg-yellow-700 text-white py-2 px-4 rounded font-bold transition" disabled>
-                        Pause
-                    </button>
-                </div>
+                <button id="start-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                    Start Game
+                </button>
+                <button id="pause-btn" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded ml-2">
+                    Pause
+                </button>
             </div>
-        </div>
 
-        <div class="text-gray-400 text-sm mt-4">
-            <p class="mb-1">Contrôles : Flèches (? ? ?), Espace (hard drop), Z (rotation)</p>
-            <p class="text-xs opacity-70">Conçu avec HTML, CSS, JavaScript et TailwindCSS</p>
+            <div class="mt-4">
+                <h3 class="text-lg font-semibold mb-1">Controls:</h3>
+                <p>? ? : Move</p>
+                <p>? : Rotate</p>
+                <p>? : Soft Drop</p>
+                <p>Space : Hard Drop</p>
+            </div>
         </div>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // Constantes du jeu
-            const COLS = 10;
-            const ROWS = 20;
-            const BLOCK_SIZE = 30;
-            const EMPTY = 'empty';
+        // ========== Hexagonal Architecture Ports/Adapters ==========
+        // Core game logic is pure functions, external interactions are handled via adapters
 
-            // Éléments DOM
-            const board = document.querySelector('.tetris-board');
-            const nextPieceDisplay = document.getElementById('next-piece');
-            const scoreDisplay = document.getElementById('score');
-            const linesDisplay = document.getElementById('lines');
-            const levelDisplay = document.getElementById('level');
-            const startBtn = document.getElementById('start-btn');
-            const pauseBtn = document.getElementById('pause-btn');
+        // Port: Game State Management
+        const GameStatePort = {
+            getInitialState: () => ({
+                board: createEmptyBoard(),
+                currentPiece: null,
+                nextPiece: null,
+                position: { x: 0, y: 0 },
+                score: 0,
+                level: 1,
+                linesCleared: 0,
+                gameOver: false,
+                paused: false
+            }),
 
-            // Variables d'état du jeu
-            let grid = createMatrix(COLS, ROWS);
-            let piece = null;
-            let nextPiece = null;
-            let dropCounter = 0;
-            let dropInterval = 1000;
-            let lastTime = 0;
-            let gameOver = true;
-            let paused = false;
-            let score = 0;
-            let lines = 0;
-            let level = 1;
-            let animationId = null;
+            cloneState: (state) => JSON.parse(JSON.stringify(state))
+        };
 
-            // Initialisation du tableau
-            function initBoard() {
-                board.innerHTML = '';
-                board.style.width = `${COLS * BLOCK_SIZE}px`;
-                board.style.height = `${ROWS * BLOCK_SIZE}px`;
+        // Port: Game Logic
+        const GameLogicPort = {
+            generateNewPiece: generateRandomPiece,
+            canMoveTo: (board, piece, position) => {
+                return piece.shape.every((row, y) =>
+                    row.every((cell, x) =>
+                        cell === 0 ||
+                        (position.y + y >= 0 &&
+                         position.y + y < board.length &&
+                         position.x + x >= 0 &&
+                         position.x + x < board[0].length &&
+                         board[position.y + y][position.x + x] === 0)
+                    )
+                );
+            },
 
-                for (let y = 0; y < ROWS; y++) {
-                    for (let x = 0; x < COLS; x++) {
-                        const cell = document.createElement('div');
-                        cell.classList.add('cell');
-                        cell.style.width = `${BLOCK_SIZE}px`;
-                        cell.style.height = `${BLOCK_SIZE}px`;
-                        cell.dataset.x = x;
-                        cell.dataset.y = y;
-                        cell.dataset.filled = 'false';
-                        board.appendChild(cell);
+            mergePieceToBoard: (board, piece, position, value) => {
+                const newBoard = board.map(row => [...row]);
+                piece.shape.forEach((row, y) => {
+                    row.forEach((cell, x) => {
+                        if (cell !== 0 && position.y + y >= 0) {
+                            newBoard[position.y + y][position.x + x] = value || cell;
+                        }
+                    });
+                });
+                return newBoard;
+            },
+
+            rotatePiece: (piece) => ({
+                ...piece,
+                shape: piece.shape[0].map((_, y) =>
+                    piece.shape.map((row, x) =>
+                        row[piece.shape[0].length - 1 - y]
+                    )
+                )
+            }),
+
+            checkLines: (board) => {
+                const linesToClear = board.reduce((acc, row, y) => {
+                    if (row.every(cell => cell !== 0)) {
+                        acc.push(y);
                     }
-                }
-            }
+                    return acc;
+                }, []);
 
-            // Formes des pièces (Tetriminos)
-            const PIECES = {
-                I: [
+                if (linesToClear.length === 0) return { board, linesCleared: 0 };
+
+                const newBoard = board.filter((_, y) => !linesToClear.includes(y));
+                const linesAdded = Array(linesToClear.length).fill(Array(board[0].length).fill(0));
+                return { board: [...linesAdded, ...newBoard], linesCleared: linesToClear.length };
+            },
+
+            calculateScore: (linesCleared, level) => {
+                const points = [0, 40, 100, 300, 1200];
+                return points[Math.min(linesCleared, 4)] * level;
+            },
+
+            shouldLevelUp: (linesCleared, currentLevel) => {
+                return Math.floor(linesCleared / 10) > currentLevel - 1;
+            },
+
+            getGravitySpeed: (level) => {
+                return Math.max(1000 - (level * 100), 100);
+            }
+        };
+
+        // ========== Core Game Logic (Functional) ==========
+        function createEmptyBoard(rows = 20, cols = 10) {
+            return Array(rows).fill().map(() => Array(cols).fill(0));
+        }
+
+        // Piece definitions
+        const PIECES = [
+            // I
+            {
+                shape: [
                     [0, 0, 0, 0],
                     [1, 1, 1, 1],
                     [0, 0, 0, 0],
                     [0, 0, 0, 0]
                 ],
-                O: [
-                    [1, 1],
-                    [1, 1]
-                ],
-                T: [
-                    [0, 1, 0],
-                    [1, 1, 1],
+                color: 1
+            },
+            // J
+            {
+                shape: [
+                    [2, 0, 0],
+                    [2, 2, 2],
                     [0, 0, 0]
                 ],
-                S: [
-                    [0, 1, 1],
-                    [1, 1, 0],
+                color: 2
+            },
+            // L
+            {
+                shape: [
+                    [0, 0, 3],
+                    [3, 3, 3],
                     [0, 0, 0]
                 ],
-                Z: [
-                    [1, 1, 0],
-                    [0, 1, 1],
+                color: 3
+            },
+            // O
+            {
+                shape: [
+                    [4, 4],
+                    [4, 4]
+                ],
+                color: 4
+            },
+            // S
+            {
+                shape: [
+                    [0, 5, 5],
+                    [5, 5, 0],
                     [0, 0, 0]
                 ],
-                J: [
-                    [1, 0, 0],
-                    [1, 1, 1],
+                color: 5
+            },
+            // T
+            {
+                shape: [
+                    [0, 6, 0],
+                    [6, 6, 6],
                     [0, 0, 0]
                 ],
-                L: [
-                    [0, 0, 1],
-                    [1, 1, 1],
+                color: 6
+            },
+            // Z
+            {
+                shape: [
+                    [7, 7, 0],
+                    [0, 7, 7],
                     [0, 0, 0]
-                ]
-            };
-
-            // Couleurs des pièces
-            const COLORS = {
-                I: 'I',
-                O: 'O',
-                T: 'T',
-                S: 'S',
-                Z: 'Z',
-                J: 'J',
-                L: 'L'
-            };
-
-            // Création d'une matrice vide
-            function createMatrix(width, height) {
-                const matrix = [];
-                while (height--) {
-                    matrix.push(new Array(width).fill(EMPTY));
-                }
-                return matrix;
+                ],
+                color: 7
             }
+        ];
 
-            // Création d'une pièce aléatoire
-            function createPiece(type) {
-                const shape = PIECES[type];
-                return {
-                    pos: {x: Math.floor(COLS / 2) - Math.floor(shape[0].length / 2), y: 0},
-                    shape: shape,
-                    type: type
+        function generateRandomPiece() {
+            return JSON.parse(JSON.stringify(PIECES[Math.floor(Math.random() * PIECES.length)]));
+        }
+
+        // ========== Adapters ==========
+
+        // Adapter: Game Controller
+        const GameControllerAdapter = (() => {
+            let gameState = GameStatePort.getInitialState();
+            let gameLoopInterval = null;
+            let holdDownHandler = null;
+
+            // Initialize game
+            const initialize = () => {
+                gameState = GameStatePort.getInitialState();
+                gameState.nextPiece = GameLogicPort.generateNewPiece();
+                spawnNewPiece();
+                RenderAdapter.render(gameState);
+            };
+
+            // Spawn new piece
+            const spawnNewPiece = () => {
+                gameState.currentPiece = gameState.nextPiece;
+                gameState.nextPiece = GameLogicPort.generateNewPiece();
+                gameState.position = { x: Math.floor(gameState.board[0].length / 2) - Math.floor(gameState.currentPiece.shape[0].length / 2), y: 0 };
+
+                // Check if game over
+                if (!GameLogicPort.canMoveTo(gameState.board, gameState.currentPiece, gameState.position)) {
+                    gameState.gameOver = true;
+                    clearInterval(gameLoopInterval);
+                    RenderAdapter.render(gameState);
+                    alert(`Game Over! Your score: ${gameState.score}`);
+                }
+            };
+
+            // Move piece
+            const movePiece = (deltaX, deltaY) => {
+                if (gameState.gameOver || gameState.paused) return;
+
+                const newPosition = {
+                    x: gameState.position.x + deltaX,
+                    y: gameState.position.y + deltaY
                 };
-            }
 
-            // Dessiner le tableau
-            function draw() {
-                // Effacer le plateau
-                document.querySelectorAll('.cell').forEach(cell => {
-                    cell.dataset.filled = 'false';
-                    cell.className = 'cell';
-                });
-
-                // Dessiner les pièces posées
-                grid.forEach((row, y) => {
-                    row.forEach((value, x) => {
-                        if (value !== EMPTY) {
-                            const cell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
-                            cell.dataset.filled = 'true';
-                            cell.classList.add(value);
-                        }
-                    });
-                });
-
-                // Dessiner la pièce courante
-                if (piece) {
-                    drawPiece(piece);
+                if (GameLogicPort.canMoveTo(gameState.board, gameState.currentPiece, newPosition)) {
+                    gameState.position = newPosition;
+                    RenderAdapter.render(gameState);
+                    return true;
                 }
-            }
 
-            // Dessiner une pièce
-            function drawPiece(p) {
-                p.shape.forEach((row, y) => {
-                    row.forEach((value, x) => {
-                        if (value) {
-                            const boardX = p.pos.x + x;
-                            const boardY = p.pos.y + y;
-                            if (boardX >=0 && boardX < COLS && boardY >=0 && boardY < ROWS) {
-                                const cell = document.querySelector(`.cell[data-x="${boardX}"][data-y="${boardY}"]`);
-                                if (cell) {
-                                    cell.dataset.filled = 'true';
-                                    cell.classList.add(p.type);
-                                }
-                            }
-                        }
-                    });
-                });
-
-                // Dessiner le fantôme (position d'atterrissage)
-                drawGhost();
-            }
-
-            // Dessiner le fantôme de la pièce
-            function drawGhost() {
-                if (!piece) return;
-
-                const ghostY = dropPosition();
-                piece.shape.forEach((row, y) => {
-                    row.forEach((value, x) => {
-                        if (value) {
-                            const boardX = piece.pos.x + x;
-                            const boardY = ghostY + y;
-                            if (boardX >=0 && boardX < COLS && boardY >=0 && boardY < ROWS) {
-                                const cell = document.querySelector(`.cell[data-x="${boardX}"][data-y="${boardY}"]`);
-                                if (cell && cell.dataset.filled === 'false') {
-                                    cell.classList.add('ghost', piece.type);
-                                }
-                            }
-                        }
-                    });
-                });
-            }
-
-            // Trouver la position d'atterrissage
-            function dropPosition() {
-                let y = piece.pos.y;
-                while (!collision(piece.pos.x, y + 1, piece.shape)) {
-                    y++;
+                // If we can't move down, place the piece
+                if (deltaY > 0) {
+                    placePiece();
+                    return false;
                 }
-                return y;
-            }
 
-            // Vérifier les collisions
-            function collision(x, y, shape) {
-                for (let row = 0; row < shape.length; row++) {
-                    for (let col = 0; col < shape[row].length; col++) {
-                        if (shape[row][col] &&
-                           (x + col < 0 ||
-                            x + col >= COLS ||
-                            y + row >= ROWS ||
-                            grid[y + row][x + col] !== EMPTY)) {
-                            return true;
-                        }
-                    }
-                }
                 return false;
-            }
+            };
 
-            // Fusionner la pièce actuelle avec le plateau
-            function merge() {
-                if (!piece) return;
+            // Rotate piece
+            const rotatePiece = () => {
+                if (gameState.gameOver || gameState.paused) return;
 
-                piece.shape.forEach((row, y) => {
-                    row.forEach((value, x) => {
-                        if (value) {
-                            const boardY = piece.pos.y + y;
-                            const boardX = piece.pos.x + x;
-                            if (boardY >= 0 && boardY < ROWS && boardX >= 0 && boardX < COLS) {
-                                grid[boardY][boardX] = piece.type;
-                            }
-                        }
-                    });
-                });
+                const rotated = GameLogicPort.rotatePiece(gameState.currentPiece);
 
-                resetPiece();
-            }
-
-            // Générer une nouvelle pièce
-            function resetPiece() {
-                piece = nextPiece;
-                nextPiece = createPiece(randomPiece());
-                updateNextPieceDisplay();
-
-                // Vérifier le game over
-                if (collision(piece.pos.x, piece.pos.y, piece.shape)) {
-                    gameOver = true;
-                    cancelAnimationFrame(animationId);
-                    startBtn.textContent = 'Recommencer';
-                    startBtn.disabled = false;
+                if (GameLogicPort.canMoveTo(gameState.board, rotated, gameState.position)) {
+                    gameState.currentPiece = rotated;
+                    RenderAdapter.render(gameState);
                 }
-            }
+            };
 
-            // Afficher la prochaine pièce
-            function updateNextPieceDisplay() {
-                nextPieceDisplay.innerHTML = '';
+            // Hard drop
+            const hardDrop = () => {
+                if (gameState.gameOver || gameState.paused) return;
 
-                if (!nextPiece) return;
-
-                const displaySize = nextPiece.type === 'O' ? 2 :
-                                  (nextPiece.type === 'I' ? 4 : 3);
-                nextPieceDisplay.className = `w-[120px] h-[120px] grid grid-cols-${displaySize} grid-rows-${displaySize} gap-1 mx-auto`;
-
-                // Centrer la pièce
-                const offsetX = Math.floor((4 - nextPiece.shape[0].length) / 2);
-                const offsetY = Math.floor((4 - nextPiece.shape.length) / 2);
-
-                for (let y = 0; y < displaySize; y++) {
-                    for (let x = 0; x < displaySize; x++) {
-                        const cell = document.createElement('div');
-                        cell.className = 'cell';
-                        cell.style.width = `${120 / displaySize}px`;
-                        cell.style.height = `${120 / displaySize}px`;
-
-                        const shapeY = y - offsetY;
-                        const shapeX = x - offsetX;
-
-                        if (shapeY >= 0 && shapeY < nextPiece.shape.length &&
-                            shapeX >= 0 && shapeX < nextPiece.shape[0].length &&
-                            nextPiece.shape[shapeY][shapeX]) {
-                            cell.classList.add(nextPiece.type);
-                        }
-
-                        nextPieceDisplay.appendChild(cell);
-                    }
+                while (movePiece(0, 1)) {
+                    // Keep moving down until we can't
                 }
-            }
+            };
 
-            // Rotation d'une pièce
-            function rotate(matrix, dir = 1) {
-                const rotated = [];
+            // Place the current piece on the board
+            const placePiece = () => {
+                gameState.board = GameLogicPort.mergePieceToBoard(gameState.board, gameState.currentPiece, gameState.position);
 
-                if (dir > 0) {
-                    for (let x = 0; x < matrix[0].length; x++) {
-                        rotated.push([]);
-                        for (let y = matrix.length - 1; y >= 0; y--) {
-                            rotated[x].push(matrix[y][x]);
-                        }
-                    }
-                } else {
-                    for (let x = matrix[0].length - 1; x >= 0; x--) {
-                        rotated.push([]);
-                        for (let y = 0; y < matrix.length; y++) {
-                            rotated[matrix[0].length - 1 - x].push(matrix[y][x]);
-                        }
-                    }
-                }
-
-                return rotated;
-            }
-
-            // Gestionnaire de rotation
-            function handleRotate(dir) {
-                if (!piece || paused || gameOver) return;
-
-                const newShape = rotate(piece.shape, dir);
-                const kickOffset = getKickOffset(piece, newShape);
-
-                if (!collision(piece.pos.x + kickOffset.x, piece.pos.y + kickOffset.y, newShape)) {
-                    piece.shape = newShape;
-                    piece.pos.x += kickOffset.x;
-                    piece.pos.y += kickOffset.y;
-                    playSound('rotate');
-                }
-            }
-
-            // Compensation des collisions lors de la rotation (wall kick)
-            function getKickOffset(piece, newShape) {
-                if (piece.type === 'O') return {x: 0, y: 0};
-
-                const offsets = piece.type === 'I' ?
-                    [
-                        {x: 0, y: 0}, {x: -1, y: 0}, {x: 2, y: 0}, {x: -1, y: 0}, {x: 2, y: 0},
-                        {x: 0, y: 1}, {x: 0, y: -1}, {x: 0, y: 2}, {x: 0, y: -1}, {x: 0, y: 2}
-                    ] : [
-                        {x: 0, y: 0}, {x: -1, y: 0}, {x: -1, y: 1}, {x: 0, y: -2}, {x: -1, y: -2},
-                        {x: 0, y: -1}, {x: -1, y: -1}, {x: 1, y: -1}, {x: -2, y: -1}, {x: 1, y: 0}
-                    ];
-
-                for (let i = 0; i < offsets.length; i++) {
-                    if (!collision(piece.pos.x + offsets[i].x, piece.pos.y + offsets[i].y, newShape)) {
-                        return offsets[i];
-                    }
-                }
-                return {x: 0, y: 0};
-            }
-
-            // Gestion des lignes complètes
-            function sweep() {
-                let linesCleared = 0;
-                let completedRows = [];
-
-                outer: for (let y = grid.length - 1; y >= 0; y--) {
-                    for (let x = 0; x < grid[y].length; x++) {
-                        if (grid[y][x] === EMPTY) {
-                            continue outer;
-                        }
-                    }
-
-                    // Animation des lignes complètes
-                    for (let x = 0; x < grid[y].length; x++) {
-                        const cell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
-                        if (cell) cell.classList.add('flash-row');
-                    }
-
-                    completedRows.unshift(y);
-                    linesCleared++;
-                }
+                // Check for completed lines
+                const { board: newBoard, linesCleared } = GameLogicPort.checkLines(gameState.board);
+                gameState.board = newBoard;
 
                 if (linesCleared > 0) {
-                    setTimeout(() => {
-                        // Supprimer les lignes complètes
-                        for (const row of completedRows) {
-                            grid.splice(row, 1);
-                            grid.unshift(new Array(COLS).fill(EMPTY));
-                        }
+                    gameState.linesCleared += linesCleared;
+                    gameState.score += GameLogicPort.calculateScore(linesCleared, gameState.level);
 
-                        // Mise à jour du score
-                        updateScore(linesCleared);
-                        playSound('clear');
-                    }, 500);
+                    if (GameLogicPort.shouldLevelUp(gameState.linesCleared, gameState.level)) {
+                        gameState.level++;
+                        startGameLoop(); // Restart loop with new speed
+                    }
                 }
 
-                return linesCleared;
-            }
+                spawnNewPiece();
+                RenderAdapter.render(gameState);
+            };
 
-            // Mise à jour du score
-            function updateScore(linesCleared) {
-                const points = [0, 100, 300, 500, 800][linesCleared] * level;
-                score += points;
-                lines += linesCleared;
+            // Game loop
+            const gameLoop = () => {
+                movePiece(0, 1);
+            };
 
-                // Passage au niveau supérieur tous les 10 lignes
-                const newLevel = Math.floor(lines / 10) + 1;
-                if (newLevel > level) {
-                    level = newLevel;
-                    dropInterval = Math.max(100, 1000 - (level - 1) * 100);
-                    playSound('levelup');
-                }
+            // Start game loop
+            const startGameLoop = () => {
+                clearInterval(gameLoopInterval);
+                gameLoopInterval = setInterval(gameLoop, GameLogicPort.getGravitySpeed(gameState.level));
+            };
 
-                scoreDisplay.textContent = score;
-                linesDisplay.textContent = lines;
-                levelDisplay.textContent = level;
-            }
+            // Start game
+            const startGame = () => {
+                if (!gameState.gameOver && gameLoopInterval) return;
 
-            // Gestion du hard drop (descente instantanée)
-            function hardDrop() {
-                if (!piece || paused || gameOver) return;
+                initialize();
+                gameState.gameOver = false;
+                gameState.paused = false;
+                startGameLoop();
+            };
 
-                piece.pos.y = dropPosition();
-                merge();
-                sweep();
-                playSound('drop');
-            }
+            // Pause game
+            const togglePause = () => {
+                if (gameState.gameOver) return;
 
-            // Génération aléatoire de pièces
-            function randomPiece() {
-                const pieces = Object.keys(PIECES);
-                return pieces[Math.floor(Math.random() * pieces.length)];
-            }
+                gameState.paused = !gameState.paused;
 
-            // Sons du jeu
-            function playSound(type) {
-                // Dans un vrai jeu, on utiliserait des fichiers audio
-                // Ici juste pour l'exemple
-                console.log(`Play sound: ${type}`);
-            }
-
-            // Fonction principale du jeu
-            function update(time = 0) {
-                if (paused || gameOver) return;
-
-                const deltaTime = time - lastTime;
-                lastTime = time;
-
-                dropCounter += deltaTime;
-                if (dropCounter > dropInterval) {
-                    moveDown();
-                }
-
-                draw();
-                animationId = requestAnimationFrame(update);
-            }
-
-            // Déplacement vers le bas
-            function moveDown() {
-                if (!piece || paused || gameOver) return;
-
-                if (!collision(piece.pos.x, piece.pos.y + 1, piece.shape)) {
-                    piece.pos.y++;
-                    dropCounter = 0;
+                if (gameState.paused) {
+                    clearInterval(gameLoopInterval);
                 } else {
-                    merge();
-                    sweep();
+                    startGameLoop();
                 }
-            }
 
-            // Gestion des contrôles
-            document.addEventListener('keydown', event => {
-                if (gameOver) return;
+                RenderAdapter.render(gameState);
+            };
 
-                switch (event.keyCode) {
-                    case 37: // Flèche gauche
-                        if (!collision(piece.pos.x - 1, piece.pos.y, piece.shape)) {
-                            piece.pos.x--;
-                            playSound('move');
+            // Handle key down
+            const handleKeyDown = (e) => {
+                if (gameState.gameOver) return;
+
+                switch (e.key) {
+                    case 'ArrowLeft':
+                        if (!holdDownHandler) {
+                            movePiece(-1, 0);
+                            holdDownHandler = setTimeout(() => {
+                                const interval = setInterval(() => {
+                                    if (!movePiece(-1, 0)) {
+                                        clearInterval(interval);
+                                        holdDownHandler = null;
+                                    }
+                                }, 100);
+                            }, 300);
                         }
                         break;
-                    case 39: // Flèche droite
-                        if (!collision(piece.pos.x + 1, piece.pos.y, piece.shape)) {
-                            piece.pos.x++;
-                            playSound('move');
+                    case 'ArrowRight':
+                        if (!holdDownHandler) {
+                            movePiece(1, 0);
+                            holdDownHandler = setTimeout(() => {
+                                const interval = setInterval(() => {
+                                    if (!movePiece(1, 0)) {
+                                        clearInterval(interval);
+                                        holdDownHandler = null;
+                                    }
+                                }, 100);
+                            }, 300);
                         }
                         break;
-                    case 40: // Flèche bas
-                        moveDown();
+                    case 'ArrowDown':
+                        movePiece(0, 1);
                         break;
-                    case 32: // Espace (hard drop)
+                    case 'ArrowUp':
+                        rotatePiece();
+                        break;
+                    case ' ':
                         hardDrop();
-                        event.preventDefault();
-                        break;
-                    case 90: // Z (rotation)
-                        handleRotate(1);
-                        event.preventDefault();
-                        break;
-                    case 80: // P (pause)
-                        togglePause();
-                        event.preventDefault();
                         break;
                 }
-            });
+            };
 
-            // Gestion de la pause
-            function togglePause() {
-                if (gameOver) return;
-
-                paused = !paused;
-                pauseBtn.textContent = paused ? 'Reprendre' : 'Pause';
-
-                if (!paused) {
-                    lastTime = performance.now();
-                    update();
+            // Handle key up
+            const handleKeyUp = (e) => {
+                if (holdDownHandler) {
+                    clearTimeout(holdDownHandler);
+                    holdDownHandler = null;
                 }
-            }
+            };
 
-            // Initialisation d'une nouvelle partie
-            function startGame() {
-                if (!gameOver && !paused) return;
+            // Expose public methods
+            return {
+                startGame,
+                togglePause,
+                handleKeyDown,
+                handleKeyUp
+            };
+        })();
 
-                // Réinitialiser l'état du jeu
-                grid = createMatrix(COLS, ROWS);
-                piece = createPiece(randomPiece());
-                nextPiece = createPiece(randomPiece());
-                dropCounter = 0;
-                dropInterval = 1000;
-                score = 0;
-                lines = 0;
-                level = 1;
-                gameOver = false;
-                paused = false;
+        // Adapter: Renderer
+        const RenderAdapter = {
+            render: (state) => {
+                // Render main board
+                const gameBoardEl = document.getElementById('game-board');
+                gameBoardEl.innerHTML = '';
 
-                // Mettre à jour l'UI
-                scoreDisplay.textContent = '0';
-                linesDisplay.textContent = '0';
-                levelDisplay.textContent = '1';
-                startBtn.textContent = 'Démarrer';
-                pauseBtn.textContent = 'Pause';
-                pauseBtn.disabled = false;
+                // Set board dimensions based on cell size
+                const boardWidth = state.board[0].length * 30;
+                const boardHeight = state.board.length * 30;
+                gameBoardEl.style.width = `${boardWidth}px`;
+                gameBoardEl.style.height = `${boardHeight}px`;
 
-                updateNextPieceDisplay();
-                lastTime = performance.now();
-                update();
-            }
-
-            // Événements des boutons
-            startBtn.addEventListener('click', startGame);
-            pauseBtn.addEventListener('click', togglePause);
-
-            // Initialisation
-            initBoard();
-
-            // UI pour mobile - boutons de contrôle virtuels
-            if ('ontouchstart' in window) {
-                const controls = document.createElement('div');
-                controls.className = 'fixed bottom-0 left-0 right-0 bg-gray-800 bg-opacity-70 p-4 z-10 grid grid-cols-3 gap-2';
-                controls.innerHTML = `
-                    <button class="control-btn bg-gray-700 p-4 rounded-full text-xl" data-action="left">?</button>
-                    <button class="control-btn bg-gray-700 p-4 rounded-full text-xl" data-action="down">?</button>
-                    <button class="control-btn bg-gray-700 p-4 rounded-full text-xl" data-action="right">?</button>
-                    <button class="control-btn bg-gray-700 p-4 rounded-full text-xl col-span-3" data-action="rotate">? Rotation (Z)</button>
-                    <button class="control-btn bg-gray-700 p-4 rounded-full text-xl col-span-3" data-action="drop">Espace (Hard Drop)</button>
-                `;
-                document.body.appendChild(controls);
-
-                controls.querySelectorAll('.control-btn').forEach(btn => {
-                    btn.addEventListener('touchstart', (e) => {
-                        e.preventDefault();
-                        const action = btn.dataset.action;
-
-                        if (gameOver) return;
-
-                        switch (action) {
-                            case 'left':
-                                if (!collision(piece.pos.x - 1, piece.pos.y, piece.shape)) piece.pos.x--;
-                                break;
-                            case 'right':
-                                if (!collision(piece.pos.x + 1, piece.pos.y, piece.shape)) piece.pos.x++;
-                                break;
-                            case 'down':
-                                moveDown();
-                                break;
-                            case 'rotate':
-                                handleRotate(1);
-                                break;
-                            case 'drop':
-                                hardDrop();
-                                break;
-                        }
+                // Render board cells
+                state.board.forEach((row, y) => {
+                    row.forEach((cell, x) => {
+                        const cellEl = document.createElement('div');
+                        cellEl.className = `cell absolute cell-${cell}`;
+                        cellEl.style.left = `${x * 30}px`;
+                        cellEl.style.top = `${y * 30}px`;
+                        gameBoardEl.appendChild(cellEl);
                     });
                 });
+
+                // Render current piece
+                if (state.currentPiece && !state.gameOver && !state.paused) {
+                    const boardWithPiece = GameLogicPort.mergePieceToBoard(
+                        state.board,
+                        state.currentPiece,
+                        state.position
+                    );
+
+                    boardWithPiece.forEach((row, y) => {
+                        row.forEach((cell, x) => {
+                            if (cell !== state.board[y][x]) {
+                                const cellEl = document.createElement('div');
+                                cellEl.className = `cell absolute cell-${cell} opacity-70`;
+                                cellEl.style.left = `${x * 30}px`;
+                                cellEl.style.top = `${y * 30}px`;
+                                gameBoardEl.appendChild(cellEl);
+                            }
+                        });
+                    });
+                }
+
+                // Render next piece
+                const nextPieceEl = document.getElementById('next-piece');
+                nextPieceEl.innerHTML = '';
+
+                if (state.nextPiece) {
+                    const pieceWidth = state.nextPiece.shape[0].length * 30;
+                    const pieceHeight = state.nextPiece.shape.length * 30;
+                    nextPieceEl.style.width = `${pieceWidth}px`;
+                    nextPieceEl.style.height = `${pieceHeight}px`;
+
+                    state.nextPiece.shape.forEach((row, y) => {
+                        row.forEach((cell, x) => {
+                            if (cell !== 0) {
+                                const cellEl = document.createElement('div');
+                                cellEl.className = `cell absolute cell-${cell}`;
+                                cellEl.style.left = `${x * 30}px`;
+                                cellEl.style.top = `${y * 30}px`;
+                                nextPieceEl.appendChild(cellEl);
+                            }
+                        });
+                    });
+                }
+
+                // Update score and level
+                document.getElementById('score').textContent = state.score;
+                document.getElementById('level').textContent = state.level;
+
+                // Update button states
+                document.getElementById('start-btn').textContent =
+                    state.gameOver ? 'Restart Game' : 'Start Game';
+                document.getElementById('pause-btn').textContent =
+                    state.paused ? 'Resume' : 'Pause';
             }
+        };
+
+        // ========== Setup Event Listeners ==========
+        document.addEventListener('DOMContentLoaded', () => {
+            // Button event listeners
+            document.getElementById('start-btn').addEventListener('click', GameControllerAdapter.startGame);
+            document.getElementById('pause-btn').addEventListener('click', GameControllerAdapter.togglePause);
+
+            // Keyboard event listeners
+            document.addEventListener('keydown', GameControllerAdapter.handleKeyDown);
+            document.addEventListener('keyup', GameControllerAdapter.handleKeyUp);
+
+            // Touch controls for mobile
+            let touchStartX = 0;
+            let touchStartY = 0;
+
+            document.addEventListener('touchstart', (e) => {
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+            }, false);
+
+            document.addEventListener('touchmove', (e) => {
+                if (!touchStartX || !touchStartY) return;
+
+                const touchEndX = e.touches[0].clientX;
+                const touchEndY = e.touches[0].clientY;
+
+                const dx = touchEndX - touchStartX;
+                const dy = touchEndY - touchStartY;
+
+                // Determine primary direction
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    // Horizontal swipe
+                    if (dx > 0) {
+                        GameControllerAdapter.handleKeyDown({ key: 'ArrowRight', preventDefault: () => {} });
+                    } else {
+                        GameControllerAdapter.handleKeyDown({ key: 'ArrowLeft', preventDefault: () => {} });
+                    }
+                } else {
+                    // Vertical swipe
+                    if (dy > 0) {
+                        GameControllerAdapter.handleKeyDown({ key: 'ArrowDown', preventDefault: () => {} });
+                    } else {
+                        GameControllerAdapter.handleKeyDown({ key: 'ArrowUp', preventDefault: () => {} });
+                    }
+                }
+
+                touchStartX = 0;
+                touchStartY = 0;
+                e.preventDefault();
+            }, false);
+
+            // Touch for hard drop (double tap)
+            let lastTap = 0;
+            document.addEventListener('touchend', (e) => {
+                const now = Date.now();
+                if (now - lastTap < 300) {
+                    GameControllerAdapter.handleKeyDown({ key: ' ', preventDefault: () => {} });
+                    e.preventDefault();
+                }
+                lastTap = now;
+            }, false);
+
+            // Initial render
+            RenderAdapter.render(GameStatePort.getInitialState());
         });
-        
     </script>
 </body>
 </html>

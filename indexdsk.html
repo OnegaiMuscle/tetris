@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tetris JS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Styles spécifiques pour le jeu */
+        .game-container {
+            perspective: 1000px;
+        }
+        .tetris-board {
+            background-color: rgba(0, 0, 0, 0.2);
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+        }
+        .cell {
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-sizing: border-box;
+        }
+        .I { background-color: #00F0F0; }
+        .O { background-color: #F0F000; }
+        .T { background-color: #A000F0; }
+        .S { background-color: #00F000; }
+        .Z { background-color: #F00000; }
+        .J { background-color: #0000F0; }
+        .L { background-color: #F0A000; }
+        .ghost { opacity: 0.3; }
+        @keyframes flash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .flash-row {
+            animation: flash 0.5s 2;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white font-mono min-h-screen flex flex-col items-center justify-center p-4">
+    <div class="max-w-4xl w-full flex flex-col items-center">
+        <h1 class="text-4xl font-bold mb-2 text-cyan-400 tracking-wider">TETRIS JS</h1>
+
+        <div class="flex flex-col md:flex-row w-full items-center md:items-start justify-center gap-6 mb-8">
+            <!-- Tableau de jeu principal -->
+            <div class="game-container mb-4 md:mb-0">
+                <div class="tetris-board w-[300px] h-[600px] grid grid-cols-10 grid-rows-20 rounded-md relative overflow-hidden">
+                    <!-- Le tableau sera généré dynamiquement par JavaScript -->
+                </div>
+            </div>
+
+            <!-- Panneau latéral -->
+            <div class="flex flex-col items-center w-full md:w-auto">
+                <div class="bg-gray-800 p-4 rounded-lg w-full mb-4">
+                    <div class="text-xl font-bold mb-2 text-center">Score</div>
+                    <div id="score" class="text-3xl text-center font-bold text-yellow-400">0</div>
+
+                    <div class="mt-6 text-lg font-bold mb-2 text-center">Niveau</div>
+                    <div id="level" class="text-2xl text-center font-bold text-green-400">1</div>
+
+                    <div class="mt-6 text-lg font-bold mb-2 text-center">Lignes</div>
+                    <div id="lines" class="text-2xl text-center font-bold text-blue-400">0</div>
+                </div>
+
+                <div class="bg-gray-800 p-4 rounded-lg w-full mb-4">
+                    <div class="text-xl font-bold mb-3 text-center">Prochain</div>
+                    <div id="next-piece" class="w-[120px] h-[120px] grid grid-cols-4 grid-rows-4 mx-auto"></div>
+                </div>
+
+                <div class="flex flex-col space-y-4 w-full">
+                    <button id="start-btn" class="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded font-bold transition">
+                        Démarrer
+                    </button>
+                    <button id="pause-btn" class="bg-yellow-600 hover:bg-yellow-700 text-white py-2 px-4 rounded font-bold transition" disabled>
+                        Pause
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-gray-400 text-sm mt-4">
+            <p class="mb-1">Contrôles : Flèches (? ? ?), Espace (hard drop), Z (rotation)</p>
+            <p class="text-xs opacity-70">Conçu avec HTML, CSS, JavaScript et TailwindCSS</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Constantes du jeu
+            const COLS = 10;
+            const ROWS = 20;
+            const BLOCK_SIZE = 30;
+            const EMPTY = 'empty';
+
+            // Éléments DOM
+            const board = document.querySelector('.tetris-board');
+            const nextPieceDisplay = document.getElementById('next-piece');
+            const scoreDisplay = document.getElementById('score');
+            const linesDisplay = document.getElementById('lines');
+            const levelDisplay = document.getElementById('level');
+            const startBtn = document.getElementById('start-btn');
+            const pauseBtn = document.getElementById('pause-btn');
+
+            // Variables d'état du jeu
+            let grid = createMatrix(COLS, ROWS);
+            let piece = null;
+            let nextPiece = null;
+            let dropCounter = 0;
+            let dropInterval = 1000;
+            let lastTime = 0;
+            let gameOver = true;
+            let paused = false;
+            let score = 0;
+            let lines = 0;
+            let level = 1;
+            let animationId = null;
+
+            // Initialisation du tableau
+            function initBoard() {
+                board.innerHTML = '';
+                board.style.width = `${COLS * BLOCK_SIZE}px`;
+                board.style.height = `${ROWS * BLOCK_SIZE}px`;
+
+                for (let y = 0; y < ROWS; y++) {
+                    for (let x = 0; x < COLS; x++) {
+                        const cell = document.createElement('div');
+                        cell.classList.add('cell');
+                        cell.style.width = `${BLOCK_SIZE}px`;
+                        cell.style.height = `${BLOCK_SIZE}px`;
+                        cell.dataset.x = x;
+                        cell.dataset.y = y;
+                        cell.dataset.filled = 'false';
+                        board.appendChild(cell);
+                    }
+                }
+            }
+
+            // Formes des pièces (Tetriminos)
+            const PIECES = {
+                I: [
+                    [0, 0, 0, 0],
+                    [1, 1, 1, 1],
+                    [0, 0, 0, 0],
+                    [0, 0, 0, 0]
+                ],
+                O: [
+                    [1, 1],
+                    [1, 1]
+                ],
+                T: [
+                    [0, 1, 0],
+                    [1, 1, 1],
+                    [0, 0, 0]
+                ],
+                S: [
+                    [0, 1, 1],
+                    [1, 1, 0],
+                    [0, 0, 0]
+                ],
+                Z: [
+                    [1, 1, 0],
+                    [0, 1, 1],
+                    [0, 0, 0]
+                ],
+                J: [
+                    [1, 0, 0],
+                    [1, 1, 1],
+                    [0, 0, 0]
+                ],
+                L: [
+                    [0, 0, 1],
+                    [1, 1, 1],
+                    [0, 0, 0]
+                ]
+            };
+
+            // Couleurs des pièces
+            const COLORS = {
+                I: 'I',
+                O: 'O',
+                T: 'T',
+                S: 'S',
+                Z: 'Z',
+                J: 'J',
+                L: 'L'
+            };
+
+            // Création d'une matrice vide
+            function createMatrix(width, height) {
+                const matrix = [];
+                while (height--) {
+                    matrix.push(new Array(width).fill(EMPTY));
+                }
+                return matrix;
+            }
+
+            // Création d'une pièce aléatoire
+            function createPiece(type) {
+                const shape = PIECES[type];
+                return {
+                    pos: {x: Math.floor(COLS / 2) - Math.floor(shape[0].length / 2), y: 0},
+                    shape: shape,
+                    type: type
+                };
+            }
+
+            // Dessiner le tableau
+            function draw() {
+                // Effacer le plateau
+                document.querySelectorAll('.cell').forEach(cell => {
+                    cell.dataset.filled = 'false';
+                    cell.className = 'cell';
+                });
+
+                // Dessiner les pièces posées
+                grid.forEach((row, y) => {
+                    row.forEach((value, x) => {
+                        if (value !== EMPTY) {
+                            const cell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+                            cell.dataset.filled = 'true';
+                            cell.classList.add(value);
+                        }
+                    });
+                });
+
+                // Dessiner la pièce courante
+                if (piece) {
+                    drawPiece(piece);
+                }
+            }
+
+            // Dessiner une pièce
+            function drawPiece(p) {
+                p.shape.forEach((row, y) => {
+                    row.forEach((value, x) => {
+                        if (value) {
+                            const boardX = p.pos.x + x;
+                            const boardY = p.pos.y + y;
+                            if (boardX >=0 && boardX < COLS && boardY >=0 && boardY < ROWS) {
+                                const cell = document.querySelector(`.cell[data-x="${boardX}"][data-y="${boardY}"]`);
+                                if (cell) {
+                                    cell.dataset.filled = 'true';
+                                    cell.classList.add(p.type);
+                                }
+                            }
+                        }
+                    });
+                });
+
+                // Dessiner le fantôme (position d'atterrissage)
+                drawGhost();
+            }
+
+            // Dessiner le fantôme de la pièce
+            function drawGhost() {
+                if (!piece) return;
+
+                const ghostY = dropPosition();
+                piece.shape.forEach((row, y) => {
+                    row.forEach((value, x) => {
+                        if (value) {
+                            const boardX = piece.pos.x + x;
+                            const boardY = ghostY + y;
+                            if (boardX >=0 && boardX < COLS && boardY >=0 && boardY < ROWS) {
+                                const cell = document.querySelector(`.cell[data-x="${boardX}"][data-y="${boardY}"]`);
+                                if (cell && cell.dataset.filled === 'false') {
+                                    cell.classList.add('ghost', piece.type);
+                                }
+                            }
+                        }
+                    });
+                });
+            }
+
+            // Trouver la position d'atterrissage
+            function dropPosition() {
+                let y = piece.pos.y;
+                while (!collision(piece.pos.x, y + 1, piece.shape)) {
+                    y++;
+                }
+                return y;
+            }
+
+            // Vérifier les collisions
+            function collision(x, y, shape) {
+                for (let row = 0; row < shape.length; row++) {
+                    for (let col = 0; col < shape[row].length; col++) {
+                        if (shape[row][col] &&
+                           (x + col < 0 ||
+                            x + col >= COLS ||
+                            y + row >= ROWS ||
+                            grid[y + row][x + col] !== EMPTY)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
+            // Fusionner la pièce actuelle avec le plateau
+            function merge() {
+                if (!piece) return;
+
+                piece.shape.forEach((row, y) => {
+                    row.forEach((value, x) => {
+                        if (value) {
+                            const boardY = piece.pos.y + y;
+                            const boardX = piece.pos.x + x;
+                            if (boardY >= 0 && boardY < ROWS && boardX >= 0 && boardX < COLS) {
+                                grid[boardY][boardX] = piece.type;
+                            }
+                        }
+                    });
+                });
+
+                resetPiece();
+            }
+
+            // Générer une nouvelle pièce
+            function resetPiece() {
+                piece = nextPiece;
+                nextPiece = createPiece(randomPiece());
+                updateNextPieceDisplay();
+
+                // Vérifier le game over
+                if (collision(piece.pos.x, piece.pos.y, piece.shape)) {
+                    gameOver = true;
+                    cancelAnimationFrame(animationId);
+                    startBtn.textContent = 'Recommencer';
+                    startBtn.disabled = false;
+                }
+            }
+
+            // Afficher la prochaine pièce
+            function updateNextPieceDisplay() {
+                nextPieceDisplay.innerHTML = '';
+
+                if (!nextPiece) return;
+
+                const displaySize = nextPiece.type === 'O' ? 2 :
+                                  (nextPiece.type === 'I' ? 4 : 3);
+                nextPieceDisplay.className = `w-[120px] h-[120px] grid grid-cols-${displaySize} grid-rows-${displaySize} gap-1 mx-auto`;
+
+                // Centrer la pièce
+                const offsetX = Math.floor((4 - nextPiece.shape[0].length) / 2);
+                const offsetY = Math.floor((4 - nextPiece.shape.length) / 2);
+
+                for (let y = 0; y < displaySize; y++) {
+                    for (let x = 0; x < displaySize; x++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+                        cell.style.width = `${120 / displaySize}px`;
+                        cell.style.height = `${120 / displaySize}px`;
+
+                        const shapeY = y - offsetY;
+                        const shapeX = x - offsetX;
+
+                        if (shapeY >= 0 && shapeY < nextPiece.shape.length &&
+                            shapeX >= 0 && shapeX < nextPiece.shape[0].length &&
+                            nextPiece.shape[shapeY][shapeX]) {
+                            cell.classList.add(nextPiece.type);
+                        }
+
+                        nextPieceDisplay.appendChild(cell);
+                    }
+                }
+            }
+
+            // Rotation d'une pièce
+            function rotate(matrix, dir = 1) {
+                const rotated = [];
+
+                if (dir > 0) {
+                    for (let x = 0; x < matrix[0].length; x++) {
+                        rotated.push([]);
+                        for (let y = matrix.length - 1; y >= 0; y--) {
+                            rotated[x].push(matrix[y][x]);
+                        }
+                    }
+                } else {
+                    for (let x = matrix[0].length - 1; x >= 0; x--) {
+                        rotated.push([]);
+                        for (let y = 0; y < matrix.length; y++) {
+                            rotated[matrix[0].length - 1 - x].push(matrix[y][x]);
+                        }
+                    }
+                }
+
+                return rotated;
+            }
+
+            // Gestionnaire de rotation
+            function handleRotate(dir) {
+                if (!piece || paused || gameOver) return;
+
+                const newShape = rotate(piece.shape, dir);
+                const kickOffset = getKickOffset(piece, newShape);
+
+                if (!collision(piece.pos.x + kickOffset.x, piece.pos.y + kickOffset.y, newShape)) {
+                    piece.shape = newShape;
+                    piece.pos.x += kickOffset.x;
+                    piece.pos.y += kickOffset.y;
+                    playSound('rotate');
+                }
+            }
+
+            // Compensation des collisions lors de la rotation (wall kick)
+            function getKickOffset(piece, newShape) {
+                if (piece.type === 'O') return {x: 0, y: 0};
+
+                const offsets = piece.type === 'I' ?
+                    [
+                        {x: 0, y: 0}, {x: -1, y: 0}, {x: 2, y: 0}, {x: -1, y: 0}, {x: 2, y: 0},
+                        {x: 0, y: 1}, {x: 0, y: -1}, {x: 0, y: 2}, {x: 0, y: -1}, {x: 0, y: 2}
+                    ] : [
+                        {x: 0, y: 0}, {x: -1, y: 0}, {x: -1, y: 1}, {x: 0, y: -2}, {x: -1, y: -2},
+                        {x: 0, y: -1}, {x: -1, y: -1}, {x: 1, y: -1}, {x: -2, y: -1}, {x: 1, y: 0}
+                    ];
+
+                for (let i = 0; i < offsets.length; i++) {
+                    if (!collision(piece.pos.x + offsets[i].x, piece.pos.y + offsets[i].y, newShape)) {
+                        return offsets[i];
+                    }
+                }
+                return {x: 0, y: 0};
+            }
+
+            // Gestion des lignes complètes
+            function sweep() {
+                let linesCleared = 0;
+                let completedRows = [];
+
+                outer: for (let y = grid.length - 1; y >= 0; y--) {
+                    for (let x = 0; x < grid[y].length; x++) {
+                        if (grid[y][x] === EMPTY) {
+                            continue outer;
+                        }
+                    }
+
+                    // Animation des lignes complètes
+                    for (let x = 0; x < grid[y].length; x++) {
+                        const cell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+                        if (cell) cell.classList.add('flash-row');
+                    }
+
+                    completedRows.unshift(y);
+                    linesCleared++;
+                }
+
+                if (linesCleared > 0) {
+                    setTimeout(() => {
+                        // Supprimer les lignes complètes
+                        for (const row of completedRows) {
+                            grid.splice(row, 1);
+                            grid.unshift(new Array(COLS).fill(EMPTY));
+                        }
+
+                        // Mise à jour du score
+                        updateScore(linesCleared);
+                        playSound('clear');
+                    }, 500);
+                }
+
+                return linesCleared;
+            }
+
+            // Mise à jour du score
+            function updateScore(linesCleared) {
+                const points = [0, 100, 300, 500, 800][linesCleared] * level;
+                score += points;
+                lines += linesCleared;
+
+                // Passage au niveau supérieur tous les 10 lignes
+                const newLevel = Math.floor(lines / 10) + 1;
+                if (newLevel > level) {
+                    level = newLevel;
+                    dropInterval = Math.max(100, 1000 - (level - 1) * 100);
+                    playSound('levelup');
+                }
+
+                scoreDisplay.textContent = score;
+                linesDisplay.textContent = lines;
+                levelDisplay.textContent = level;
+            }
+
+            // Gestion du hard drop (descente instantanée)
+            function hardDrop() {
+                if (!piece || paused || gameOver) return;
+
+                piece.pos.y = dropPosition();
+                merge();
+                sweep();
+                playSound('drop');
+            }
+
+            // Génération aléatoire de pièces
+            function randomPiece() {
+                const pieces = Object.keys(PIECES);
+                return pieces[Math.floor(Math.random() * pieces.length)];
+            }
+
+            // Sons du jeu
+            function playSound(type) {
+                // Dans un vrai jeu, on utiliserait des fichiers audio
+                // Ici juste pour l'exemple
+                console.log(`Play sound: ${type}`);
+            }
+
+            // Fonction principale du jeu
+            function update(time = 0) {
+                if (paused || gameOver) return;
+
+                const deltaTime = time - lastTime;
+                lastTime = time;
+
+                dropCounter += deltaTime;
+                if (dropCounter > dropInterval) {
+                    moveDown();
+                }
+
+                draw();
+                animationId = requestAnimationFrame(update);
+            }
+
+            // Déplacement vers le bas
+            function moveDown() {
+                if (!piece || paused || gameOver) return;
+
+                if (!collision(piece.pos.x, piece.pos.y + 1, piece.shape)) {
+                    piece.pos.y++;
+                    dropCounter = 0;
+                } else {
+                    merge();
+                    sweep();
+                }
+            }
+
+            // Gestion des contrôles
+            document.addEventListener('keydown', event => {
+                if (gameOver) return;
+
+                switch (event.keyCode) {
+                    case 37: // Flèche gauche
+                        if (!collision(piece.pos.x - 1, piece.pos.y, piece.shape)) {
+                            piece.pos.x--;
+                            playSound('move');
+                        }
+                        break;
+                    case 39: // Flèche droite
+                        if (!collision(piece.pos.x + 1, piece.pos.y, piece.shape)) {
+                            piece.pos.x++;
+                            playSound('move');
+                        }
+                        break;
+                    case 40: // Flèche bas
+                        moveDown();
+                        break;
+                    case 32: // Espace (hard drop)
+                        hardDrop();
+                        event.preventDefault();
+                        break;
+                    case 90: // Z (rotation)
+                        handleRotate(1);
+                        event.preventDefault();
+                        break;
+                    case 80: // P (pause)
+                        togglePause();
+                        event.preventDefault();
+                        break;
+                }
+            });
+
+            // Gestion de la pause
+            function togglePause() {
+                if (gameOver) return;
+
+                paused = !paused;
+                pauseBtn.textContent = paused ? 'Reprendre' : 'Pause';
+
+                if (!paused) {
+                    lastTime = performance.now();
+                    update();
+                }
+            }
+
+            // Initialisation d'une nouvelle partie
+            function startGame() {
+                if (!gameOver && !paused) return;
+
+                // Réinitialiser l'état du jeu
+                grid = createMatrix(COLS, ROWS);
+                piece = createPiece(randomPiece());
+                nextPiece = createPiece(randomPiece());
+                dropCounter = 0;
+                dropInterval = 1000;
+                score = 0;
+                lines = 0;
+                level = 1;
+                gameOver = false;
+                paused = false;
+
+                // Mettre à jour l'UI
+                scoreDisplay.textContent = '0';
+                linesDisplay.textContent = '0';
+                levelDisplay.textContent = '1';
+                startBtn.textContent = 'Démarrer';
+                pauseBtn.textContent = 'Pause';
+                pauseBtn.disabled = false;
+
+                updateNextPieceDisplay();
+                lastTime = performance.now();
+                update();
+            }
+
+            // Événements des boutons
+            startBtn.addEventListener('click', startGame);
+            pauseBtn.addEventListener('click', togglePause);
+
+            // Initialisation
+            initBoard();
+
+            // UI pour mobile - boutons de contrôle virtuels
+            if ('ontouchstart' in window) {
+                const controls = document.createElement('div');
+                controls.className = 'fixed bottom-0 left-0 right-0 bg-gray-800 bg-opacity-70 p-4 z-10 grid grid-cols-3 gap-2';
+                controls.innerHTML = `
+                    <button class="control-btn bg-gray-700 p-4 rounded-full text-xl" data-action="left">?</button>
+                    <button class="control-btn bg-gray-700 p-4 rounded-full text-xl" data-action="down">?</button>
+                    <button class="control-btn bg-gray-700 p-4 rounded-full text-xl" data-action="right">?</button>
+                    <button class="control-btn bg-gray-700 p-4 rounded-full text-xl col-span-3" data-action="rotate">? Rotation (Z)</button>
+                    <button class="control-btn bg-gray-700 p-4 rounded-full text-xl col-span-3" data-action="drop">Espace (Hard Drop)</button>
+                `;
+                document.body.appendChild(controls);
+
+                controls.querySelectorAll('.control-btn').forEach(btn => {
+                    btn.addEventListener('touchstart', (e) => {
+                        e.preventDefault();
+                        const action = btn.dataset.action;
+
+                        if (gameOver) return;
+
+                        switch (action) {
+                            case 'left':
+                                if (!collision(piece.pos.x - 1, piece.pos.y, piece.shape)) piece.pos.x--;
+                                break;
+                            case 'right':
+                                if (!collision(piece.pos.x + 1, piece.pos.y, piece.shape)) piece.pos.x++;
+                                break;
+                            case 'down':
+                                moveDown();
+                                break;
+                            case 'rotate':
+                                handleRotate(1);
+                                break;
+                            case 'drop':
+                                hardDrop();
+                                break;
+                        }
+                    });
+                });
+            }
+        });
+        
+    </script>
+</body>
+</html>
